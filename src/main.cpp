@@ -70,19 +70,6 @@ void loop() {
   // 检查是否需要强制全屏刷新（半小时 = 1800000毫秒）
   bool needForceRefresh = (currentMillis - lastFullRefresh >= 1800000);
   
-  // 添加调试信息
-  static int lastDebugMinute = -1;
-  if (currentTime.minute != lastDebugMinute) {
-    Serial.print("Current minute: ");
-    Serial.print(currentTime.minute);
-    Serial.print(", Last displayed: ");
-    Serial.print(lastDisplayedMinute);
-    Serial.print(", Need refresh: ");
-    Serial.print(needRefresh ? "YES" : "NO");
-    Serial.print(", Force refresh: ");
-    Serial.println(needForceRefresh ? "YES" : "NO");
-    lastDebugMinute = currentTime.minute;
-  }
   
   if (needRefresh || needForceRefresh) {
     ESP.wdtFeed();
@@ -192,15 +179,6 @@ void showPartialTimeDisplay() {
   int windowW = display.width();
   int windowH = tbh + 30; // 给足够的高度
   
-  // 添加调试信息
-  Serial.print("Partial refresh window: X=");
-  Serial.print(windowX);
-  Serial.print(", Y=");
-  Serial.print(windowY);
-  Serial.print(", W=");
-  Serial.print(windowW);
-  Serial.print(", H=");
-  Serial.println(windowH);
   
   display.setPartialWindow(windowX, windowY, windowW, windowH);
   display.firstPage();
