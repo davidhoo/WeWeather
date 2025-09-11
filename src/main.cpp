@@ -3,6 +3,7 @@
 #include <GxEPD2_3C.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
 #include "SevenSegment42pt7b.h"
+#include "Weather_Symbols_Regular9pt7b.h"
 
 // GDEY029T94 2.9寸三色墨水屏 296x128
 struct DateTime {
@@ -14,7 +15,17 @@ struct DateTime {
   int second;
 };
 
+// Weather information structure
+struct WeatherInfo {
+  float temperature;    // Temperature in Celsius
+  int humidity;         // Humidity percentage
+  char symbol;          // Weather symbol character
+  // Weather symbol mapping:
+  // n=晴(sunny), d=雪(snow), m=雨(rain), l=雾(fog), c=阴(overcast), o=多云(cloudy), k=雷雨(thunderstorm)
+};
+
 DateTime currentTime = {25, 9, 10, 20, 1, 34};
+WeatherInfo currentWeather = {23.5, 65, 'n'}; // 23.5°C, 65% humidity, sunny
 unsigned long lastMillis = 0;
 
 #define EPD_CS    D8
@@ -27,7 +38,8 @@ void showTimeDisplay();
 void updateTime();
 String getFormattedTime();
 String getFormattedDate();
-String getLunarDate();
+String getWeatherInfo();
+char getWeatherSymbol();
 String getDayOfWeek(int year, int month, int day);
 void processSerialInput();
 void setTimeFromTimestamp(unsigned long timestamp);
@@ -61,7 +73,7 @@ void loop() {
 void showTimeDisplay() {
   String timeStr = getFormattedTime();
   String dateStr = getFormattedDate();
-  String lunarStr = getLunarDate();
+  String weatherStr = getWeatherInfo();
   
   display.setFullWindow();
   display.firstPage();
@@ -69,38 +81,51 @@ void showTimeDisplay() {
     display.fillScreen(GxEPD_WHITE);
     display.setTextColor(GxEPD_BLACK);
     
-    // 显示农历（使用小字体，左对齐）
+    // Display weather info (using small font, left aligned)
     display.setFont(&FreeMonoBold9pt7b);
-    int lunarX = 10; // 左对齐，距离左边缘10像素
-    int lunarY = 15; // 顶部位置
+    int weatherX = 10; // Left aligned, 10 pixels from left edge
+    int weatherY = 15; // Top position
     
-    display.setCursor(lunarX, lunarY);
-    display.print(lunarStr);
+    display.setCursor(weatherX, weatherY);
+    display.print(weatherStr);
     
-    // 在农历下方画一条线
-    int topLineY = lunarY + 5;
+    // Display weather symbol (right aligned)
+    display.setFont(&Weather_Symbols_Regular9pt7b);
+    char symbolStr[2] = {getWeatherSymbol(), '\0'};
+    int16_t sbx, sby;
+    uint16_t sbw, sbh;
+    display.getTextBounds(symbolStr, 0, 0, &sbx, &sby, &sbw, &sbh);
+    
+    int symbolX = display.width() - sbw - 10; // Right aligned, 10 pixels from right edge
+    int symbolY = weatherY; // Same Y position as weather info
+    
+    display.setCursor(symbolX, symbolY);
+    display.print(symbolStr);
+    
+    // Draw line below weather info
+    int topLineY = weatherY + 5;
     display.drawLine(10, topLineY, display.width() - 10, topLineY, GxEPD_BLACK);
     
-    // 显示时间（使用大字体，居中）
+    // Display time (using large font, centered)
     display.setFont(&SevenSegment42pt7b);
     int16_t tbx, tby;
     uint16_t tbw, tbh;
     display.getTextBounds(timeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
     
     int timeX = (display.width() - tbw) / 2;
-    int timeY = topLineY + tbh + 10; // 在上方线下方
+    int timeY = topLineY + tbh + 10; // Below the top line
     
     display.setCursor(timeX, timeY);
     display.print(timeStr);
     
-    // 在时间下方画一条线
+    // Draw line below time
     int bottomLineY = timeY + 10;
     display.drawLine(10, bottomLineY, display.width() - 10, bottomLineY, GxEPD_BLACK);
     
-    // 显示日期（使用小字体，左对齐）
+    // Display date (using small font, left aligned)
     display.setFont(&FreeMonoBold9pt7b);
-    int dateX = 10; // 左对齐，距离左边缘10像素
-    int dateY = bottomLineY + 20; // 线下方25像素
+    int dateX = 10; // Left aligned, 10 pixels from left edge
+    int dateY = bottomLineY + 20; // 20 pixels below the line
     
     display.setCursor(dateX, dateY);
     display.print(dateStr);
@@ -188,48 +213,19 @@ String getDayOfWeek(int year, int month, int day) {
   return days[h];
 }
 
-String getLunarDate() {
-  // 简化的农历计算，使用阿拉伯数字格式 M-D
+String getWeatherInfo() {
+  // Format weather information for display (temperature and humidity only)
+  char weatherString[20];
+  sprintf(weatherString, "%.1fC %d%%",
+          currentWeather.temperature,
+          currentWeather.humidity);
   
-  int fullYear = 2000 + currentTime.year;
-  int month = currentTime.month;
-  int day = currentTime.day;
-  
-  // 简化计算：基于公历日期估算农历（这是一个简化版本）
-  // 2025年9月11日对应农历七月廿一左右
-  int lunarMonth = 7; // 七月
-  int lunarDay = 21;  // 廿一
-  
-  // 根据当前日期调整（简化处理）
-  int dayOffset = (fullYear - 2025) * 365 + (month - 9) * 30 + (day - 11);
-  lunarDay += dayOffset;
-  
-  // 处理月份和日期溢出
-  while (lunarDay > 30) {
-    lunarDay -= 30;
-    lunarMonth++;
-    if (lunarMonth > 12) {
-      lunarMonth = 1;
-    }
-  }
-  while (lunarDay < 1) {
-    lunarDay += 30;
-    lunarMonth--;
-    if (lunarMonth < 1) {
-      lunarMonth = 12;
-    }
-  }
-  
-  // 确保索引在有效范围内
-  if (lunarMonth < 1) lunarMonth = 1;
-  if (lunarMonth > 12) lunarMonth = 12;
-  if (lunarDay < 1) lunarDay = 1;
-  if (lunarDay > 30) lunarDay = 30;
-  
-  // 返回 M-D 格式
-  char lunarString[10];
-  sprintf(lunarString, "%d-%d", lunarMonth, lunarDay);
-  return String(lunarString);
+  return String(weatherString);
+}
+
+char getWeatherSymbol() {
+  // Return weather symbol character
+  return currentWeather.symbol;
 }
 // 处理串口输入
 void processSerialInput() {
