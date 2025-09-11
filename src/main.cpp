@@ -36,7 +36,8 @@ bool isFirstPartialRefresh = true;    // 标记是否为第一次局部刷新
 #define EPD_DC    D2
 #define EPD_RST   D4
 #define EPD_BUSY  D1
-GxEPD2_BW<GxEPD2_290_GDEY029T94, GxEPD2_290_GDEY029T94::HEIGHT> display(GxEPD2_290_GDEY029T94(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
+// 原始定义可能存在width/height混淆，尝试使用WIDTH而不是HEIGHT
+GxEPD2_BW<GxEPD2_290_GDEY029T94, GxEPD2_290_GDEY029T94::WIDTH> display(GxEPD2_290_GDEY029T94(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
 
 void showTimeDisplay();
 void showPartialTimeDisplay(); // 局部刷新时钟区域
@@ -57,8 +58,15 @@ void setup() {
   lastDisplayedMinute = currentTime.minute;
   isFirstPartialRefresh = true;
   display.init();
-  display.setRotation(1); // 调整旋转以适应128x296分辨率
+  
   Serial.begin(115200);
+  Serial.println("Display initialization...");
+  Serial.printf("Before rotation - Width: %d, Height: %d\n", display.width(), display.height());
+  
+  display.setRotation(1); // 调整旋转以适应128x296分辨率
+  Serial.printf("After setRotation(1) - Width: %d, Height: %d\n", display.width(), display.height());
+  Serial.println("Expected: Width=296, Height=128 (after 90° rotation)");
+  
   showTimeDisplay();
 }
 void loop() {
@@ -164,14 +172,61 @@ void showTimeDisplay() {
 
 void showPartialTimeDisplay() {
   Serial.println("Starting partial refresh...");
-  Serial.printf("Screen dimensions: %dx%d\n", display.width(), display.height());
+  Serial.printf("Screen dimensions after rotation: %dx%d (width x height)\n", display.width(), display.height());
+  Serial.printf("Original screen spec: 128x296, Rotation: 1 (90 degrees)\n");
+  Serial.printf("Expected after rotation: 296x128 (width x height)\n");
   
   // 如果是第一次局部刷新，需要先进行一次完整的屏幕缓冲区初始化
   if (isFirstPartialRefresh) {
     Serial.println("First partial refresh - initializing screen buffer");
-    // 写入完整屏幕缓冲区
-    display.writeScreenBuffer(0xFF); // 白色背景
-    delay(10);
+    // 先进行一次完整的屏幕初始化以建立正确的缓冲区状态
+    display.setFullWindow();
+    display.firstPage();
+    do {
+      display.fillScreen(GxEPD_WHITE);
+      display.setTextColor(GxEPD_BLACK);
+      
+      // 重新绘制完整界面但不刷新到屏幕
+      // 这样可以确保缓冲区状态正确
+      String weatherStr = getWeatherInfo();
+      display.setFont(&FreeMonoBold9pt7b);
+      display.setCursor(10, 15);
+      display.print(weatherStr);
+      
+      // 绘制天气符号
+      display.setFont(&Weather_Symbols_Regular9pt7b);
+      char symbolStr[2] = {getWeatherSymbol(), '\0'};
+      int16_t sbx, sby;
+      uint16_t sbw, sbh;
+      display.getTextBounds(symbolStr, 0, 0, &sbx, &sby, &sbw, &sbh);
+      int symbolX = display.width() - sbw - 10;
+      display.setCursor(symbolX, 15);
+      display.print(symbolStr);
+      
+      // 绘制线条
+      display.drawLine(10, 20, display.width() - 10, 20, GxEPD_BLACK);
+      
+      // 绘制时间
+      display.setFont(&SevenSegment42pt7b);
+      String fixedTimeStr = "00:00";
+      int16_t tbx, tby;
+      uint16_t tbw, tbh;
+      display.getTextBounds(fixedTimeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
+      int timeX = (display.width() - tbw) / 2;
+      int timeY = 20 + tbh + 10;
+      display.setCursor(timeX, timeY);
+      display.print(getFormattedTime());
+      
+      // 绘制底部线条和日期
+      display.drawLine(10, timeY + 10, display.width() - 10, timeY + 10, GxEPD_BLACK);
+      display.setFont(&FreeMonoBold9pt7b);
+      display.setCursor(10, timeY + 30);
+      display.print(getFormattedDate());
+      
+    } while (display.nextPage());
+    
+    Serial.println("Screen buffer initialized for partial refresh");
+    delay(100); // 确保初始化完成
   }
   
   // 获取完整的时间字符串
@@ -214,10 +269,13 @@ void showPartialTimeDisplay() {
   Serial.printf("Minute template bounds: minuteTbw=%d\n", minuteTbw);
   
   // 检查坐标是否超出屏幕范围
+  // 检查坐标是否超出屏幕范围
+  Serial.printf("Screen width: %d, Screen height: %d\n", display.width(), display.height());
+  Serial.printf("Checking minuteX (%d) against screen width (%d)\n", minuteX, display.width());
+  
   if (minuteX >= display.width()) {
     Serial.printf("ERROR: minuteX (%d) exceeds screen width (%d)!\n", minuteX, display.width());
     Serial.println("Using fallback: refresh entire time area");
-    
     // 使用整个时间区域进行局部刷新
     int windowX = 0; // 从屏幕左边开始
     int windowY = timeY - tbh - 2; // 文本的顶部位置
@@ -246,13 +304,15 @@ void showPartialTimeDisplay() {
     } while (display.nextPage());
     
   } else {
-    // 正常的分钟部分局部刷新
-    // 设置局部窗口，只覆盖分钟部分
-    // 确保窗口边界对齐到8像素边界（GDEY029T94的要求）
-    int windowX = (minuteX / 8) * 8; // 对齐到8像素边界
+    // 改为刷新整个时间区域，确保更可靠的刷新效果
+    // 使用整个时间字符串的区域而不是仅分钟部分
+    int windowX = (timeX / 8) * 8; // 对齐到8像素边界，从时间开始位置
     int windowY = timeY - tbh - 2; // 文本的顶部位置
-    int windowW = ((minuteTbw + 15) / 8) * 8; // 对齐到8像素边界，增加边距
+    int windowW = ((tbw + 15) / 8) * 8; // 使用完整时间宽度，对齐到8像素边界
     int windowH = tbh + 4; // 增加边距
+    
+    Serial.printf("Before bounds check - windowX=%d, windowY=%d, windowW=%d, windowH=%d\n",
+                  windowX, windowY, windowW, windowH);
     
     // 确保窗口在屏幕范围内
     if (windowX < 0) windowX = 0;
@@ -267,26 +327,28 @@ void showPartialTimeDisplay() {
     display.setPartialWindow(windowX, windowY, windowW, windowH);
     display.firstPage();
     do {
-      // 清除分钟区域
+      // 清除整个时间区域
       display.fillRect(windowX, windowY, windowW, windowH, GxEPD_WHITE);
       
-      // 重新绘制分钟部分
+      // 重新绘制完整的时间字符串
       display.setTextColor(GxEPD_BLACK);
       display.setFont(&SevenSegment42pt7b);
       
-      // 只绘制分钟部分
-      String minuteStr = String(currentTime.minute);
-      if (currentTime.minute < 10) {
-        minuteStr = "0" + minuteStr;
-      }
-      display.setCursor(minuteX, timeY);
-      display.print(minuteStr);
+      Serial.printf("Drawing complete time: %s at position (%d, %d)\n", timeStr.c_str(), timeX, timeY);
+      display.setCursor(timeX, timeY);
+      display.print(timeStr);
       
     } while (display.nextPage());
+    
+    Serial.println("Calling display.refresh() to force screen update...");
+    display.refresh(); // 强制刷新屏幕
   }
   
+  // 重要：调用hibernate来完成刷新过程
+  display.hibernate();
+  
   // 添加延时确保刷新完成
-  delay(50);
+  delay(200); // 增加延时确保墨水屏刷新完成
   Serial.println("Partial refresh completed.");
 }
 

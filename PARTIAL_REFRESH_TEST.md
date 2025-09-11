@@ -39,16 +39,37 @@ pio device monitor
   ```
   Performing minute refresh
   Starting partial refresh...
-  First partial refresh - initializing screen buffer
+  Screen dimensions: 296x128
+  Time string: HH:MM
+  Fixed time bounds: tbx=xx, tby=xx, tbw=xx, tbh=xx
+  Time position: timeX=xx, timeY=xx
+  Hour part bounds: hourTbw=xx
+  Calculated minuteX: xx (timeX=xx + hourTbw=xx)
+  Minute template bounds: minuteTbw=xx
   Partial window: X=xx, Y=xx, W=xx, H=xx
   Minute text position: X=xx, Y=xx
   Partial refresh completed.
   ```
 
+#### 3.3 坐标验证
+- **屏幕尺寸检查**：确认输出显示 `Screen dimensions: 296x128`
+- **坐标范围检查**：所有X坐标应 < 296，所有Y坐标应 < 128
+- **错误检测**：如果看到 `ERROR: minuteX (xxx) exceeds screen width (296)!`，说明触发了fallback机制
+
 #### 3.3 刷新效果验证
 - **正常情况**：只有分钟数字区域刷新，其他区域保持不变
 - **刷新速度**：局部刷新应比全屏刷新快（约1-2秒 vs 5-10秒）
 - **显示质量**：分钟数字应清晰，无重影或残留
+
+#### 3.4 Fallback机制测试
+- 如果坐标计算错误，系统会自动使用fallback机制
+- 观察串口输出：
+  ```
+  ERROR: minuteX (xxx) exceeds screen width (296)!
+  Using fallback: refresh entire time area
+  Fallback window: X=0, Y=xx, W=296, H=xx
+  ```
+- 此时会刷新整个时间区域而不是只刷新分钟部分
 
 ### 4. 强制全屏刷新测试
 - 等待30分钟或重启设备
@@ -61,29 +82,41 @@ pio device monitor
 ## 预期结果
 
 ### 成功指标
-1. ✅ 分钟变化时只刷新分钟数字区域
-2. ✅ 局部刷新速度明显快于全屏刷新
-3. ✅ 分钟数字显示清晰，无残影
-4. ✅ 其他区域（天气、小时、日期）保持不变
-5. ✅ 串口输出显示正确的窗口坐标
+1. ✅ 屏幕尺寸正确显示为 296x128
+2. ✅ 所有坐标都在有效范围内（X < 296, Y < 128）
+3. ✅ 分钟变化时只刷新分钟数字区域（或整个时间区域作为fallback）
+4. ✅ 局部刷新速度明显快于全屏刷新
+5. ✅ 分钟数字显示清晰，无残影
+6. ✅ 其他区域（天气、日期）保持不变
+7. ✅ 串口输出显示正确的窗口坐标
 
 ### 故障排除
 
-#### 问题1：局部刷新不生效（整屏刷新）
-- **可能原因**：窗口坐标计算错误
-- **解决方案**：检查串口输出的窗口坐标是否合理
+#### 问题1：坐标超出屏幕范围
+- **症状**：串口显示 `ERROR: minuteX (xxx) exceeds screen width (296)!`
+- **原因**：字体太大或坐标计算错误
+- **解决方案**：系统会自动使用fallback机制刷新整个时间区域
 
-#### 问题2：分钟数字显示不清晰
+#### 问题2：局部刷新不生效（整屏刷新）
+- **可能原因**：窗口坐标计算错误或触发了fallback
+- **解决方案**：检查串口输出的窗口坐标和调试信息
+
+#### 问题3：分钟数字显示不清晰
 - **可能原因**：窗口边界未对齐到8像素
 - **解决方案**：确认windowX和windowW都是8的倍数
 
-#### 问题3：刷新速度没有提升
-- **可能原因**：未使用快速局部刷新模式
+#### 问题4：刷新速度没有提升
+- **可能原因**：未使用快速局部刷新模式或触发了fallback
 - **解决方案**：确认GDEY029T94驱动的hasFastPartialUpdate=true
 
-#### 问题4：首次局部刷新异常
+#### 问题5：首次局部刷新异常
 - **可能原因**：缓冲区未初始化
 - **解决方案**：确认isFirstPartialRefresh逻辑正确执行
+
+#### 问题6：屏幕尺寸显示错误
+- **症状**：屏幕尺寸不是 296x128
+- **原因**：旋转设置或驱动配置错误
+- **解决方案**：确认 `display.setRotation(1)` 和正确的驱动类型
 
 ## 技术细节
 
