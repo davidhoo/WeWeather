@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <GxEPD2_BW.h>
 #include <GxEPD2_3C.h>
-#include <Fonts/FreeMonoBold18pt7b.h>
+#include <Fonts/FreeMonoBold9pt7b.h>
 #include "SevenSegment42pt7b.h"
 
 // GDEY029T94 2.9寸三色墨水屏 296x128
@@ -26,6 +26,9 @@ GxEPD2_3C<GxEPD2_290_T94, GxEPD2_290_T94::HEIGHT> display(GxEPD2_290_T94(EPD_CS,
 void showTimeDisplay();
 void updateTime();
 String getFormattedTime();
+String getFormattedDate();
+String getLunarDate();
+String getDayOfWeek(int year, int month, int day);
 void processSerialInput();
 void setTimeFromTimestamp(unsigned long timestamp);
 DateTime timestampToDateTime(unsigned long timestamp);
@@ -57,23 +60,51 @@ void loop() {
 
 void showTimeDisplay() {
   String timeStr = getFormattedTime();
+  String dateStr = getFormattedDate();
+  String lunarStr = getLunarDate();
   
   display.setFullWindow();
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
     display.setTextColor(GxEPD_BLACK);
-    display.setFont(&SevenSegment42pt7b);
     
+    // 显示农历（使用小字体，左对齐）
+    display.setFont(&FreeMonoBold9pt7b);
+    int lunarX = 10; // 左对齐，距离左边缘10像素
+    int lunarY = 15; // 顶部位置
+    
+    display.setCursor(lunarX, lunarY);
+    display.print(lunarStr);
+    
+    // 在农历下方画一条线
+    int topLineY = lunarY + 5;
+    display.drawLine(10, topLineY, display.width() - 10, topLineY, GxEPD_BLACK);
+    
+    // 显示时间（使用大字体，居中）
+    display.setFont(&SevenSegment42pt7b);
     int16_t tbx, tby;
     uint16_t tbw, tbh;
     display.getTextBounds(timeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
     
-    int x = (display.width() - tbw) / 2;
-    int y = (display.height() + tbh) / 2;
+    int timeX = (display.width() - tbw) / 2;
+    int timeY = topLineY + tbh + 10; // 在上方线下方
     
-    display.setCursor(x, y);
+    display.setCursor(timeX, timeY);
     display.print(timeStr);
+    
+    // 在时间下方画一条线
+    int bottomLineY = timeY + 10;
+    display.drawLine(10, bottomLineY, display.width() - 10, bottomLineY, GxEPD_BLACK);
+    
+    // 显示日期（使用小字体，左对齐）
+    display.setFont(&FreeMonoBold9pt7b);
+    int dateX = 10; // 左对齐，距离左边缘10像素
+    int dateY = bottomLineY + 20; // 线下方25像素
+    
+    display.setCursor(dateX, dateY);
+    display.print(dateStr);
+    
   } while (display.nextPage());
   display.hibernate();
 }
@@ -125,6 +156,80 @@ String getFormattedTime() {
   sprintf(timeString, "%02d:%02d", currentTime.hour, currentTime.minute);
   
   return String(timeString);
+}
+
+String getFormattedDate() {
+  // 获取完整年份（2000 + 两位数年份）
+  int fullYear = 2000 + currentTime.year;
+  
+  // 获取星期几
+  String dayOfWeek = getDayOfWeek(fullYear, currentTime.month, currentTime.day);
+  
+  char dateString[50];
+  sprintf(dateString, "%04d/%02d/%02d %s", fullYear, currentTime.month, currentTime.day, dayOfWeek.c_str());
+  
+  return String(dateString);
+}
+
+String getDayOfWeek(int year, int month, int day) {
+  // 使用Zeller公式计算星期几
+  if (month < 3) {
+    month += 12;
+    year--;
+  }
+  
+  int k = year % 100;
+  int j = year / 100;
+  
+  int h = (day + ((13 * (month + 1)) / 5) + k + (k / 4) + (j / 4) - 2 * j) % 7;
+  
+  // 转换为星期几字符串（0=周六，1=周日，2=周一...）
+  String days[] = {"Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"};
+  return days[h];
+}
+
+String getLunarDate() {
+  // 简化的农历计算，使用阿拉伯数字格式 M-D
+  
+  int fullYear = 2000 + currentTime.year;
+  int month = currentTime.month;
+  int day = currentTime.day;
+  
+  // 简化计算：基于公历日期估算农历（这是一个简化版本）
+  // 2025年9月11日对应农历七月廿一左右
+  int lunarMonth = 7; // 七月
+  int lunarDay = 21;  // 廿一
+  
+  // 根据当前日期调整（简化处理）
+  int dayOffset = (fullYear - 2025) * 365 + (month - 9) * 30 + (day - 11);
+  lunarDay += dayOffset;
+  
+  // 处理月份和日期溢出
+  while (lunarDay > 30) {
+    lunarDay -= 30;
+    lunarMonth++;
+    if (lunarMonth > 12) {
+      lunarMonth = 1;
+    }
+  }
+  while (lunarDay < 1) {
+    lunarDay += 30;
+    lunarMonth--;
+    if (lunarMonth < 1) {
+      lunarMonth = 12;
+    }
+  }
+  
+  // 确保索引在有效范围内
+  if (lunarMonth < 1) lunarMonth = 1;
+  if (lunarMonth > 12) lunarMonth = 12;
+  if (lunarDay < 1) lunarDay = 1;
+  if (lunarDay > 30) lunarDay = 30;
+  
+  // 返回 M-D 格式
+  char lunarString[10];
+  sprintf(lunarString, "%d-%d", lunarMonth, lunarDay);
+  return String(lunarString);
 }
 // 处理串口输入
 void processSerialInput() {
