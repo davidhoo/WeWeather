@@ -30,6 +30,7 @@ unsigned long lastMillis = 0;
 unsigned long lastFullRefresh = 0;    // 上次全屏刷新时间
 unsigned long lastPartialRefresh = 0; // 上次局部刷新时间
 int lastDisplayedMinute = -1;         // 上次显示的分钟数，用于检测分钟变化
+bool isFirstPartialRefresh = true;    // 标记是否为第一次局部刷新
 
 #define EPD_CS    D8
 #define EPD_DC    D2
@@ -54,6 +55,7 @@ void setup() {
   lastFullRefresh = millis();
   lastPartialRefresh = millis();
   lastDisplayedMinute = currentTime.minute;
+  isFirstPartialRefresh = true;
   display.init();
   display.setRotation(1); // 调整旋转以适应128x296分辨率
   Serial.begin(115200);
@@ -76,10 +78,12 @@ void loop() {
     if (needForceRefresh) {
       Serial.println("Performing forced full refresh (30min cycle)");
       lastFullRefresh = currentMillis;
+      isFirstPartialRefresh = true; // 重置局部刷新标记
       showTimeDisplay();
     } else {
       Serial.println("Performing minute refresh");
       showPartialTimeDisplay(); // 使用局部刷新替代全屏刷新
+      isFirstPartialRefresh = false; // 标记已进行过局部刷新
     }
     lastPartialRefresh = currentMillis;
     lastDisplayedMinute = currentTime.minute;
@@ -154,16 +158,23 @@ void showTimeDisplay() {
     display.print(dateStr);
     
   } while (display.nextPage());
+  
   display.hibernate();
 }
 
 void showPartialTimeDisplay() {
   Serial.println("Starting partial refresh...");
-  // 只刷新分钟部分（时间字符串的最后两个字符）
-  String minuteStr = String(currentTime.minute);
-  if (currentTime.minute < 10) {
-    minuteStr = "0" + minuteStr;
+  
+  // 如果是第一次局部刷新，需要先进行一次完整的屏幕缓冲区初始化
+  if (isFirstPartialRefresh) {
+    Serial.println("First partial refresh - initializing screen buffer");
+    // 写入完整屏幕缓冲区
+    display.writeScreenBuffer(0xFF); // 白色背景
+    delay(10);
   }
+  
+  // 获取完整的时间字符串
+  String timeStr = getFormattedTime();
   
   // 使用与showTimeDisplay完全相同的坐标计算（固定位置）
   display.setFont(&SevenSegment42pt7b);
@@ -189,38 +200,51 @@ void showPartialTimeDisplay() {
   // 分钟部分的起始X坐标
   int minuteX = timeX + hourTbw;
   
-  // 计算分钟部分的宽度
+  // 计算分钟部分的宽度 - 使用"00"来确保宽度一致
+  String minuteTemplate = "00";
   int16_t minuteTbx, minuteTby;
   uint16_t minuteTbw, minuteTbh;
-  display.getTextBounds(minuteStr, 0, 0, &minuteTbx, &minuteTby, &minuteTbw, &minuteTbh);
+  display.getTextBounds(minuteTemplate, 0, 0, &minuteTbx, &minuteTby, &minuteTbw, &minuteTbh);
   
-  // 设置局部窗口，只覆盖分钟部分（增加边距以确保完全覆盖）
-  int windowX = minuteX - 5; // 增加边距
-  int windowY = timeY - tbh - 2; // 文本的顶部位置，增加边距
-  int windowW = minuteTbw + 10; // 增加边距
+  // 设置局部窗口，只覆盖分钟部分
+  // 确保窗口边界对齐到8像素边界（GDEY029T94的要求）
+  int windowX = (minuteX / 8) * 8; // 对齐到8像素边界
+  int windowY = timeY - tbh - 2; // 文本的顶部位置
+  int windowW = ((minuteTbw + 15) / 8) * 8; // 对齐到8像素边界，增加边距
   int windowH = tbh + 4; // 增加边距
   
-  Serial.printf("Partial window: X=%d, Y=%d, W=%d, H=%d\n", windowX, windowY, windowW, windowH);
-  Serial.printf("Minute text position: X=%d, Y=%d, Text='%s'\n", minuteX, timeY, minuteStr.c_str());
+  // 确保窗口在屏幕范围内
+  if (windowX < 0) windowX = 0;
+  if (windowY < 0) windowY = 0;
+  if (windowX + windowW > display.width()) windowW = display.width() - windowX;
+  if (windowY + windowH > display.height()) windowH = display.height() - windowY;
   
-  // 使用GxEPD2库的局部刷新方法
+  Serial.printf("Partial window: X=%d, Y=%d, W=%d, H=%d\n", windowX, windowY, windowW, windowH);
+  Serial.printf("Minute text position: X=%d, Y=%d\n", minuteX, timeY);
+  
+  // 使用GxEPD2的标准局部刷新方法
   display.setPartialWindow(windowX, windowY, windowW, windowH);
   display.firstPage();
   do {
-    // 清除分钟部分区域
+    // 清除分钟区域
     display.fillRect(windowX, windowY, windowW, windowH, GxEPD_WHITE);
     
     // 重新绘制分钟部分
     display.setTextColor(GxEPD_BLACK);
     display.setFont(&SevenSegment42pt7b);
+    
+    // 只绘制分钟部分
+    String minuteStr = String(currentTime.minute);
+    if (currentTime.minute < 10) {
+      minuteStr = "0" + minuteStr;
+    }
     display.setCursor(minuteX, timeY);
     display.print(minuteStr);
     
   } while (display.nextPage());
   
   // 添加延时确保刷新完成
-  delay(100);
-  display.hibernate();
+  delay(50);
   Serial.println("Partial refresh completed.");
 }
 
