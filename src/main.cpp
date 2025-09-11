@@ -27,6 +27,9 @@ struct WeatherInfo {
 DateTime currentTime = {25, 9, 10, 20, 1, 34};
 WeatherInfo currentWeather = {23.5, 65, 'n'}; // 23.5°C, 65% humidity, sunny
 unsigned long lastMillis = 0;
+unsigned long lastFullRefresh = 0;    // 上次全屏刷新时间
+unsigned long lastPartialRefresh = 0; // 上次局部刷新时间
+int lastDisplayedMinute = -1;         // 上次显示的分钟数，用于检测分钟变化
 
 #define EPD_CS    D8
 #define EPD_DC    D2
@@ -35,6 +38,7 @@ unsigned long lastMillis = 0;
 GxEPD2_3C<GxEPD2_290_T94, GxEPD2_290_T94::HEIGHT> display(GxEPD2_290_T94(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
 
 void showTimeDisplay();
+void showPartialTimeDisplay(); // 局部刷新时钟区域
 void updateTime();
 String getFormattedTime();
 String getFormattedDate();
@@ -47,25 +51,53 @@ DateTime timestampToDateTime(unsigned long timestamp);
 
 void setup() {
   lastMillis = millis();
+  lastFullRefresh = millis();
+  lastPartialRefresh = millis();
+  lastDisplayedMinute = currentTime.minute;
   display.init();
   display.setRotation(1);
   Serial.begin(115200);
   showTimeDisplay();
 }
-
 void loop() {
-  static unsigned long lastDisplayUpdate = 0;
+  unsigned long currentMillis = millis();
   
   // 处理串口输入
   processSerialInput();
+  // 检查是否需要刷新（分钟变化时）
+  bool needRefresh = (currentTime.minute != lastDisplayedMinute);
   
-  updateTime();
-  if (millis() - lastDisplayUpdate >= 60000 || lastDisplayUpdate == 0) {
-    ESP.wdtFeed();
-    showTimeDisplay();
-    lastDisplayUpdate = millis();
+  // 检查是否需要强制全屏刷新（半小时 = 1800000毫秒）
+  bool needForceRefresh = (currentMillis - lastFullRefresh >= 1800000);
+  
+  // 添加调试信息
+  static int lastDebugMinute = -1;
+  if (currentTime.minute != lastDebugMinute) {
+    Serial.print("Current minute: ");
+    Serial.print(currentTime.minute);
+    Serial.print(", Last displayed: ");
+    Serial.print(lastDisplayedMinute);
+    Serial.print(", Need refresh: ");
+    Serial.print(needRefresh ? "YES" : "NO");
+    Serial.print(", Force refresh: ");
+    Serial.println(needForceRefresh ? "YES" : "NO");
+    lastDebugMinute = currentTime.minute;
   }
   
+  if (needRefresh || needForceRefresh) {
+    ESP.wdtFeed();
+    if (needForceRefresh) {
+      Serial.println("Performing forced full refresh (30min cycle)");
+      lastFullRefresh = currentMillis;
+    } else {
+      Serial.println("Performing minute refresh");
+    }
+    showTimeDisplay();
+    lastPartialRefresh = currentMillis;
+    lastDisplayedMinute = currentTime.minute;
+  }
+  
+  updateTime();
   ESP.wdtFeed();
   delay(1000);
 }
@@ -106,11 +138,14 @@ void showTimeDisplay() {
     int topLineY = weatherY + 5;
     display.drawLine(10, topLineY, display.width() - 10, topLineY, GxEPD_BLACK);
     
-    // Display time (using large font, centered)
+    // Display time (using large font, centered with fixed position)
     display.setFont(&SevenSegment42pt7b);
+    
+    // 使用固定的时间字符串"00:00"来计算居中位置，确保位置不变
+    String fixedTimeStr = "00:00";
     int16_t tbx, tby;
     uint16_t tbw, tbh;
-    display.getTextBounds(timeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
+    display.getTextBounds(fixedTimeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
     
     int timeX = (display.width() - tbw) / 2;
     int timeY = topLineY + tbh + 10; // Below the top line
@@ -129,6 +164,55 @@ void showTimeDisplay() {
     
     display.setCursor(dateX, dateY);
     display.print(dateStr);
+    
+  } while (display.nextPage());
+  display.hibernate();
+}
+
+void showPartialTimeDisplay() {
+  String timeStr = getFormattedTime();
+  
+  // 使用与showTimeDisplay完全相同的坐标计算（固定位置）
+  display.setFont(&SevenSegment42pt7b);
+  
+  // 使用固定的时间字符串"00:00"来计算居中位置，确保位置不变
+  String fixedTimeStr = "00:00";
+  int16_t tbx, tby;
+  uint16_t tbw, tbh;
+  display.getTextBounds(fixedTimeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
+  
+  int timeX = (display.width() - tbw) / 2;
+  int weatherY = 15; // 与showTimeDisplay中的weatherY保持一致
+  int topLineY = weatherY + 5;
+  int timeY = topLineY + tbh + 10;
+  
+  // 设置局部窗口，覆盖整个时钟区域
+  int windowX = 0;
+  int windowY = topLineY;
+  int windowW = display.width();
+  int windowH = tbh + 30; // 给足够的高度
+  
+  // 添加调试信息
+  Serial.print("Partial refresh window: X=");
+  Serial.print(windowX);
+  Serial.print(", Y=");
+  Serial.print(windowY);
+  Serial.print(", W=");
+  Serial.print(windowW);
+  Serial.print(", H=");
+  Serial.println(windowH);
+  
+  display.setPartialWindow(windowX, windowY, windowW, windowH);
+  display.firstPage();
+  do {
+    // 清除时钟区域
+    display.fillRect(windowX, windowY, windowW, windowH, GxEPD_WHITE);
+    
+    // 重新绘制时钟
+    display.setTextColor(GxEPD_BLACK);
+    display.setFont(&SevenSegment42pt7b);
+    display.setCursor(timeX, timeY);
+    display.print(timeStr);
     
   } while (display.nextPage());
   display.hibernate();
@@ -264,8 +348,12 @@ void setTimeFromTimestamp(unsigned long timestamp) {
   currentTime = newTime;
   lastMillis = millis();
   
-  // 立即刷新显示
+  // 立即刷新显示并重置刷新计时器
+  unsigned long currentMillis = millis();
   showTimeDisplay();
+  lastFullRefresh = currentMillis;
+  lastPartialRefresh = currentMillis;
+  lastDisplayedMinute = currentTime.minute;
 }
 
 // 判断是否为闰年
