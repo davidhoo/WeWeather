@@ -164,6 +164,7 @@ void showTimeDisplay() {
 
 void showPartialTimeDisplay() {
   Serial.println("Starting partial refresh...");
+  Serial.printf("Screen dimensions: %dx%d\n", display.width(), display.height());
   
   // 如果是第一次局部刷新，需要先进行一次完整的屏幕缓冲区初始化
   if (isFirstPartialRefresh) {
@@ -175,6 +176,7 @@ void showPartialTimeDisplay() {
   
   // 获取完整的时间字符串
   String timeStr = getFormattedTime();
+  Serial.printf("Time string: %s\n", timeStr.c_str());
   
   // 使用与showTimeDisplay完全相同的坐标计算（固定位置）
   display.setFont(&SevenSegment42pt7b);
@@ -184,11 +186,13 @@ void showPartialTimeDisplay() {
   int16_t tbx, tby;
   uint16_t tbw, tbh;
   display.getTextBounds(fixedTimeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
+  Serial.printf("Fixed time bounds: tbx=%d, tby=%d, tbw=%d, tbh=%d\n", tbx, tby, tbw, tbh);
   
   int timeX = (display.width() - tbw) / 2;
   int weatherY = 15; // 与showTimeDisplay中的weatherY保持一致
   int topLineY = weatherY + 5;
   int timeY = topLineY + tbh + 10;
+  Serial.printf("Time position: timeX=%d, timeY=%d\n", timeX, timeY);
   
   // 计算分钟部分的位置（时间字符串的第4和第5个字符）
   // 时间格式为"HH:MM"，分钟部分是最后两个字符
@@ -196,52 +200,90 @@ void showPartialTimeDisplay() {
   int16_t hourTbx, hourTby;
   uint16_t hourTbw, hourTbh;
   display.getTextBounds(hourPart, 0, 0, &hourTbx, &hourTby, &hourTbw, &hourTbh);
+  Serial.printf("Hour part bounds: hourTbw=%d\n", hourTbw);
   
   // 分钟部分的起始X坐标
   int minuteX = timeX + hourTbw;
+  Serial.printf("Calculated minuteX: %d (timeX=%d + hourTbw=%d)\n", minuteX, timeX, hourTbw);
   
   // 计算分钟部分的宽度 - 使用"00"来确保宽度一致
   String minuteTemplate = "00";
   int16_t minuteTbx, minuteTby;
   uint16_t minuteTbw, minuteTbh;
   display.getTextBounds(minuteTemplate, 0, 0, &minuteTbx, &minuteTby, &minuteTbw, &minuteTbh);
+  Serial.printf("Minute template bounds: minuteTbw=%d\n", minuteTbw);
   
-  // 设置局部窗口，只覆盖分钟部分
-  // 确保窗口边界对齐到8像素边界（GDEY029T94的要求）
-  int windowX = (minuteX / 8) * 8; // 对齐到8像素边界
-  int windowY = timeY - tbh - 2; // 文本的顶部位置
-  int windowW = ((minuteTbw + 15) / 8) * 8; // 对齐到8像素边界，增加边距
-  int windowH = tbh + 4; // 增加边距
-  
-  // 确保窗口在屏幕范围内
-  if (windowX < 0) windowX = 0;
-  if (windowY < 0) windowY = 0;
-  if (windowX + windowW > display.width()) windowW = display.width() - windowX;
-  if (windowY + windowH > display.height()) windowH = display.height() - windowY;
-  
-  Serial.printf("Partial window: X=%d, Y=%d, W=%d, H=%d\n", windowX, windowY, windowW, windowH);
-  Serial.printf("Minute text position: X=%d, Y=%d\n", minuteX, timeY);
-  
-  // 使用GxEPD2的标准局部刷新方法
-  display.setPartialWindow(windowX, windowY, windowW, windowH);
-  display.firstPage();
-  do {
-    // 清除分钟区域
-    display.fillRect(windowX, windowY, windowW, windowH, GxEPD_WHITE);
+  // 检查坐标是否超出屏幕范围
+  if (minuteX >= display.width()) {
+    Serial.printf("ERROR: minuteX (%d) exceeds screen width (%d)!\n", minuteX, display.width());
+    Serial.println("Using fallback: refresh entire time area");
     
-    // 重新绘制分钟部分
-    display.setTextColor(GxEPD_BLACK);
-    display.setFont(&SevenSegment42pt7b);
+    // 使用整个时间区域进行局部刷新
+    int windowX = 0; // 从屏幕左边开始
+    int windowY = timeY - tbh - 2; // 文本的顶部位置
+    int windowW = display.width(); // 整个屏幕宽度
+    int windowH = tbh + 4; // 文本高度加边距
     
-    // 只绘制分钟部分
-    String minuteStr = String(currentTime.minute);
-    if (currentTime.minute < 10) {
-      minuteStr = "0" + minuteStr;
-    }
-    display.setCursor(minuteX, timeY);
-    display.print(minuteStr);
+    // 确保窗口在屏幕范围内
+    if (windowY < 0) windowY = 0;
+    if (windowY + windowH > display.height()) windowH = display.height() - windowY;
     
-  } while (display.nextPage());
+    Serial.printf("Fallback window: X=%d, Y=%d, W=%d, H=%d\n", windowX, windowY, windowW, windowH);
+    
+    // 使用GxEPD2的标准局部刷新方法
+    display.setPartialWindow(windowX, windowY, windowW, windowH);
+    display.firstPage();
+    do {
+      // 清除整个时间区域
+      display.fillRect(windowX, windowY, windowW, windowH, GxEPD_WHITE);
+      
+      // 重新绘制完整的时间字符串
+      display.setTextColor(GxEPD_BLACK);
+      display.setFont(&SevenSegment42pt7b);
+      display.setCursor(timeX, timeY);
+      display.print(timeStr);
+      
+    } while (display.nextPage());
+    
+  } else {
+    // 正常的分钟部分局部刷新
+    // 设置局部窗口，只覆盖分钟部分
+    // 确保窗口边界对齐到8像素边界（GDEY029T94的要求）
+    int windowX = (minuteX / 8) * 8; // 对齐到8像素边界
+    int windowY = timeY - tbh - 2; // 文本的顶部位置
+    int windowW = ((minuteTbw + 15) / 8) * 8; // 对齐到8像素边界，增加边距
+    int windowH = tbh + 4; // 增加边距
+    
+    // 确保窗口在屏幕范围内
+    if (windowX < 0) windowX = 0;
+    if (windowY < 0) windowY = 0;
+    if (windowX + windowW > display.width()) windowW = display.width() - windowX;
+    if (windowY + windowH > display.height()) windowH = display.height() - windowY;
+    
+    Serial.printf("Partial window: X=%d, Y=%d, W=%d, H=%d\n", windowX, windowY, windowW, windowH);
+    Serial.printf("Minute text position: X=%d, Y=%d\n", minuteX, timeY);
+    
+    // 使用GxEPD2的标准局部刷新方法
+    display.setPartialWindow(windowX, windowY, windowW, windowH);
+    display.firstPage();
+    do {
+      // 清除分钟区域
+      display.fillRect(windowX, windowY, windowW, windowH, GxEPD_WHITE);
+      
+      // 重新绘制分钟部分
+      display.setTextColor(GxEPD_BLACK);
+      display.setFont(&SevenSegment42pt7b);
+      
+      // 只绘制分钟部分
+      String minuteStr = String(currentTime.minute);
+      if (currentTime.minute < 10) {
+        minuteStr = "0" + minuteStr;
+      }
+      display.setCursor(minuteX, timeY);
+      display.print(minuteStr);
+      
+    } while (display.nextPage());
+  }
   
   // 添加延时确保刷新完成
   delay(50);
