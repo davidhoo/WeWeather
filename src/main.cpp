@@ -39,6 +39,7 @@ bool isFirstPartialRefresh = true;    // 标记是否为第一次局部刷新
 // 原始定义可能存在width/height混淆，尝试使用WIDTH而不是HEIGHT
 GxEPD2_BW<GxEPD2_290_GDEY029T94, GxEPD2_290_GDEY029T94::WIDTH> display(GxEPD2_290_GDEY029T94(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
 
+// 基础函数声明
 void showTimeDisplay();
 void showPartialTimeDisplay(); // 局部刷新时钟区域
 void updateTime();
@@ -52,499 +53,154 @@ void setTimeFromTimestamp(unsigned long timestamp);
 DateTime timestampToDateTime(unsigned long timestamp);
 
 void setup() {
-  lastMillis = millis();
-  lastFullRefresh = millis();
-  lastPartialRefresh = millis();
-  lastDisplayedMinute = currentTime.minute;
-  isFirstPartialRefresh = true;
-  display.init();
-  
   Serial.begin(115200);
-  Serial.println("Display initialization...");
-  Serial.printf("Before rotation - Width: %d, Height: %d\n", display.width(), display.height());
+  Serial.println("WeWeather - Partial Refresh Test");
   
-  display.setRotation(1); // 调整旋转以适应128x296分辨率
-  Serial.printf("After setRotation(1) - Width: %d, Height: %d\n", display.width(), display.height());
-  Serial.println("Expected: Width=296, Height=128 (after 90° rotation)");
+  // 初始化显示屏
+  display.init(115200, true, 2, false);
+  display.setRotation(1);
+  display.setFont(&FreeMonoBold9pt7b);
   
-  showTimeDisplay();
-}
-void loop() {
-  unsigned long currentMillis = millis();
-  
-  // 处理串口输入
-  processSerialInput();
-  // 检查是否需要刷新（分钟变化时）
-  bool needRefresh = (currentTime.minute != lastDisplayedMinute);
-  
-  // 检查是否需要强制全屏刷新（半小时 = 1800000毫秒）
-  bool needForceRefresh = (currentMillis - lastFullRefresh >= 1800000);
-  
-  
-  if (needRefresh || needForceRefresh) {
-    ESP.wdtFeed();
-    if (needForceRefresh) {
-      Serial.println("Performing forced full refresh (30min cycle)");
-      lastFullRefresh = currentMillis;
-      isFirstPartialRefresh = true; // 重置局部刷新标记
-      showTimeDisplay();
-    } else {
-      Serial.println("Performing minute refresh");
-      showPartialTimeDisplay(); // 使用局部刷新替代全屏刷新
-      isFirstPartialRefresh = false; // 标记已进行过局部刷新
-    }
-    lastPartialRefresh = currentMillis;
-    lastDisplayedMinute = currentTime.minute;
-  }
-  
-  updateTime();
-  ESP.wdtFeed();
-  delay(1000);
-}
-
-void showTimeDisplay() {
-  String timeStr = getFormattedTime();
-  String dateStr = getFormattedDate();
-  String weatherStr = getWeatherInfo();
-  
-  display.setFullWindow();
+  // 显示启动信息
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
     display.setTextColor(GxEPD_BLACK);
-    
-    // Display weather info (using small font, left aligned)
-    display.setFont(&FreeMonoBold9pt7b);
-    int weatherX = 10; // Left aligned, 10 pixels from left edge
-    int weatherY = 15; // Top position
-    
-    display.setCursor(weatherX, weatherY);
-    display.print(weatherStr);
-    
-    // Display weather symbol (right aligned)
-    display.setFont(&Weather_Symbols_Regular9pt7b);
-    char symbolStr[2] = {getWeatherSymbol(), '\0'};
-    int16_t sbx, sby;
-    uint16_t sbw, sbh;
-    display.getTextBounds(symbolStr, 0, 0, &sbx, &sby, &sbw, &sbh);
-    
-    int symbolX = display.width() - sbw - 10; // Right aligned, 10 pixels from right edge
-    int symbolY = weatherY; // Same Y position as weather info
-    
-    display.setCursor(symbolX, symbolY);
-    display.print(symbolStr);
-    
-    // Draw line below weather info
-    int topLineY = weatherY + 5;
-    display.drawLine(10, topLineY, display.width() - 10, topLineY, GxEPD_BLACK);
-    
-    // Display time (using large font, centered with fixed position)
-    display.setFont(&SevenSegment42pt7b);
-    
-    // 使用固定的时间字符串"00:00"来计算居中位置，确保位置不变
-    String fixedTimeStr = "00:00";
-    int16_t tbx, tby;
-    uint16_t tbw, tbh;
-    display.getTextBounds(fixedTimeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
-    
-    int timeX = (display.width() - tbw) / 2;
-    int timeY = topLineY + tbh + 10; // Below the top line
-    
-    display.setCursor(timeX, timeY);
-    display.print(timeStr);
-    
-    // Draw line below time
-    int bottomLineY = timeY + 10;
-    display.drawLine(10, bottomLineY, display.width() - 10, bottomLineY, GxEPD_BLACK);
-    
-    // Display date (using small font, left aligned)
-    display.setFont(&FreeMonoBold9pt7b);
-    int dateX = 10; // Left aligned, 10 pixels from left edge
-    int dateY = bottomLineY + 20; // 20 pixels below the line
-    
-    display.setCursor(dateX, dateY);
-    display.print(dateStr);
-    
-  } while (display.nextPage());
-  
-  display.hibernate();
+    display.setCursor(10, 30);
+    display.println("WeWeather");
+    display.setCursor(10, 60);
+    display.println("Partial Refresh Test");
+  } while(display.nextPage());
 }
 
-void showPartialTimeDisplay() {
-  Serial.println("Starting partial refresh...");
-  Serial.printf("Screen dimensions after rotation: %dx%d (width x height)\n", display.width(), display.height());
-  Serial.printf("Original screen spec: 128x296, Rotation: 1 (90 degrees)\n");
-  Serial.printf("Expected after rotation: 296x128 (width x height)\n");
-  
-  // 如果是第一次局部刷新，需要先进行一次完整的屏幕缓冲区初始化
-  if (isFirstPartialRefresh) {
-    Serial.println("First partial refresh - initializing screen buffer");
-    // 先进行一次完整的屏幕初始化以建立正确的缓冲区状态
-    display.setFullWindow();
-    display.firstPage();
-    do {
-      display.fillScreen(GxEPD_WHITE);
-      display.setTextColor(GxEPD_BLACK);
-      
-      // 重新绘制完整界面但不刷新到屏幕
-      // 这样可以确保缓冲区状态正确
-      String weatherStr = getWeatherInfo();
-      display.setFont(&FreeMonoBold9pt7b);
-      display.setCursor(10, 15);
-      display.print(weatherStr);
-      
-      // 绘制天气符号
-      display.setFont(&Weather_Symbols_Regular9pt7b);
-      char symbolStr[2] = {getWeatherSymbol(), '\0'};
-      int16_t sbx, sby;
-      uint16_t sbw, sbh;
-      display.getTextBounds(symbolStr, 0, 0, &sbx, &sby, &sbw, &sbh);
-      int symbolX = display.width() - sbw - 10;
-      display.setCursor(symbolX, 15);
-      display.print(symbolStr);
-      
-      // 绘制线条
-      display.drawLine(10, 20, display.width() - 10, 20, GxEPD_BLACK);
-      
-      // 绘制时间
-      display.setFont(&SevenSegment42pt7b);
-      String fixedTimeStr = "00:00";
-      int16_t tbx, tby;
-      uint16_t tbw, tbh;
-      display.getTextBounds(fixedTimeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
-      int timeX = (display.width() - tbw) / 2;
-      int timeY = 20 + tbh + 10;
-      display.setCursor(timeX, timeY);
-      display.print(getFormattedTime());
-      
-      // 绘制底部线条和日期
-      display.drawLine(10, timeY + 10, display.width() - 10, timeY + 10, GxEPD_BLACK);
-      display.setFont(&FreeMonoBold9pt7b);
-      display.setCursor(10, timeY + 30);
-      display.print(getFormattedDate());
-      
-    } while (display.nextPage());
-    
-    Serial.println("Screen buffer initialized for partial refresh");
-    delay(100); // 确保初始化完成
-  }
-  
-  // 获取完整的时间字符串
-  String timeStr = getFormattedTime();
-  Serial.printf("Time string: %s\n", timeStr.c_str());
-  
-  // 使用与showTimeDisplay完全相同的坐标计算（固定位置）
-  display.setFont(&SevenSegment42pt7b);
-  
-  // 使用固定的时间字符串"00:00"来计算居中位置，确保位置不变
-  String fixedTimeStr = "00:00";
-  int16_t tbx, tby;
-  uint16_t tbw, tbh;
-  display.getTextBounds(fixedTimeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
-  Serial.printf("Fixed time bounds: tbx=%d, tby=%d, tbw=%d, tbh=%d\n", tbx, tby, tbw, tbh);
-  
-  int timeX = (display.width() - tbw) / 2;
-  int weatherY = 15; // 与showTimeDisplay中的weatherY保持一致
-  int topLineY = weatherY + 5;
-  int timeY = topLineY + tbh + 10;
-  Serial.printf("Time position: timeX=%d, timeY=%d\n", timeX, timeY);
-  
-  // 计算分钟部分的位置（时间字符串的第4和第5个字符）
-  // 时间格式为"HH:MM"，分钟部分是最后两个字符
-  String hourPart = "00:"; // 前面的部分
-  int16_t hourTbx, hourTby;
-  uint16_t hourTbw, hourTbh;
-  display.getTextBounds(hourPart, 0, 0, &hourTbx, &hourTby, &hourTbw, &hourTbh);
-  Serial.printf("Hour part bounds: hourTbw=%d\n", hourTbw);
-  
-  // 分钟部分的起始X坐标
-  int minuteX = timeX + hourTbw;
-  Serial.printf("Calculated minuteX: %d (timeX=%d + hourTbw=%d)\n", minuteX, timeX, hourTbw);
-  
-  // 计算分钟部分的宽度 - 使用"00"来确保宽度一致
-  String minuteTemplate = "00";
-  int16_t minuteTbx, minuteTby;
-  uint16_t minuteTbw, minuteTbh;
-  display.getTextBounds(minuteTemplate, 0, 0, &minuteTbx, &minuteTby, &minuteTbw, &minuteTbh);
-  Serial.printf("Minute template bounds: minuteTbw=%d\n", minuteTbw);
-  
-  // 检查坐标是否超出屏幕范围
-  // 检查坐标是否超出屏幕范围
-  Serial.printf("Screen width: %d, Screen height: %d\n", display.width(), display.height());
-  Serial.printf("Checking minuteX (%d) against screen width (%d)\n", minuteX, display.width());
-  
-  if (minuteX >= display.width()) {
-    Serial.printf("ERROR: minuteX (%d) exceeds screen width (%d)!\n", minuteX, display.width());
-    Serial.println("Using fallback: refresh entire time area");
-    // 使用整个时间区域进行局部刷新
-    int windowX = 0; // 从屏幕左边开始
-    int windowY = timeY - tbh - 2; // 文本的顶部位置
-    int windowW = display.width(); // 整个屏幕宽度
-    int windowH = tbh + 4; // 文本高度加边距
-    
-    // 确保窗口在屏幕范围内
-    if (windowY < 0) windowY = 0;
-    if (windowY + windowH > display.height()) windowH = display.height() - windowY;
-    
-    Serial.printf("Fallback window: X=%d, Y=%d, W=%d, H=%d\n", windowX, windowY, windowW, windowH);
-    
-    // 使用GxEPD2的标准局部刷新方法
-    display.setPartialWindow(windowX, windowY, windowW, windowH);
-    display.firstPage();
-    do {
-      // 清除整个时间区域
-      display.fillRect(windowX, windowY, windowW, windowH, GxEPD_WHITE);
-      
-      // 重新绘制完整的时间字符串
-      display.setTextColor(GxEPD_BLACK);
-      display.setFont(&SevenSegment42pt7b);
-      display.setCursor(timeX, timeY);
-      display.print(timeStr);
-      
-    } while (display.nextPage());
-    
-  } else {
-    // 改为刷新整个时间区域，确保更可靠的刷新效果
-    // 使用整个时间字符串的区域而不是仅分钟部分
-    int windowX = (timeX / 8) * 8; // 对齐到8像素边界，从时间开始位置
-    int windowY = timeY - tbh - 2; // 文本的顶部位置
-    int windowW = ((tbw + 15) / 8) * 8; // 使用完整时间宽度，对齐到8像素边界
-    int windowH = tbh + 4; // 增加边距
-    
-    Serial.printf("Before bounds check - windowX=%d, windowY=%d, windowW=%d, windowH=%d\n",
-                  windowX, windowY, windowW, windowH);
-    
-    // 确保窗口在屏幕范围内
-    if (windowX < 0) windowX = 0;
-    if (windowY < 0) windowY = 0;
-    if (windowX + windowW > display.width()) windowW = display.width() - windowX;
-    if (windowY + windowH > display.height()) windowH = display.height() - windowY;
-    
-    Serial.printf("Partial window: X=%d, Y=%d, W=%d, H=%d\n", windowX, windowY, windowW, windowH);
-    Serial.printf("Minute text position: X=%d, Y=%d\n", minuteX, timeY);
-    
-    // 使用GxEPD2的标准局部刷新方法
-    display.setPartialWindow(windowX, windowY, windowW, windowH);
-    display.firstPage();
-    do {
-      // 清除整个时间区域
-      display.fillRect(windowX, windowY, windowW, windowH, GxEPD_WHITE);
-      
-      // 重新绘制完整的时间字符串
-      display.setTextColor(GxEPD_BLACK);
-      display.setFont(&SevenSegment42pt7b);
-      
-      Serial.printf("Drawing complete time: %s at position (%d, %d)\n", timeStr.c_str(), timeX, timeY);
-      display.setCursor(timeX, timeY);
-      display.print(timeStr);
-      
-    } while (display.nextPage());
-    
-    Serial.println("Calling display.refresh() to force screen update...");
-    display.refresh(); // 强制刷新屏幕
-  }
-  
-  // 重要：调用hibernate来完成刷新过程
-  display.hibernate();
-  
-  // 添加延时确保刷新完成
-  delay(200); // 增加延时确保墨水屏刷新完成
-  Serial.println("Partial refresh completed.");
-}
-
+// 更新时间函数
 void updateTime() {
-  unsigned long currentMillis = millis();
-  
-  if (currentMillis - lastMillis >= 1000) {
-    lastMillis = currentMillis;
-    
-    currentTime.second++;
-    
-    if (currentTime.second >= 60) {
-      currentTime.second = 0;
-      currentTime.minute++;
-      
-      if (currentTime.minute >= 60) {
-        currentTime.minute = 0;
-        currentTime.hour++;
-        
-        if (currentTime.hour >= 24) {
-          currentTime.hour = 0;
-          currentTime.day++;
-          
-          int daysInMonth = 30;
-          if (currentTime.month == 2) daysInMonth = 28;
-          else if (currentTime.month == 4 || currentTime.month == 6 ||
-                   currentTime.month == 9 || currentTime.month == 11) daysInMonth = 30;
-          else daysInMonth = 31;
-          
-          if (currentTime.day > daysInMonth) {
-            currentTime.day = 1;
-            currentTime.month++;
-            
-            if (currentTime.month > 12) {
-              currentTime.month = 1;
-              currentTime.year++;
-              if (currentTime.year > 99) currentTime.year = 0;
-            }
-          }
-        }
+  // 简单的时间递增模拟
+  currentTime.second++;
+  if (currentTime.second >= 60) {
+    currentTime.second = 0;
+    currentTime.minute++;
+    if (currentTime.minute >= 60) {
+      currentTime.minute = 0;
+      currentTime.hour++;
+      if (currentTime.hour >= 24) {
+        currentTime.hour = 0;
+        // 这里可以添加日期递增逻辑
       }
     }
   }
 }
 
+// 获取格式化时间字符串
 String getFormattedTime() {
-  char timeString[6];
-  sprintf(timeString, "%02d:%02d", currentTime.hour, currentTime.minute);
-  
-  return String(timeString);
+  char buffer[6];
+  sprintf(buffer, "%02d:%02d", currentTime.hour, currentTime.minute);
+  return String(buffer);
 }
 
+// 局部刷新时钟区域
+void showPartialTimeDisplay() {
+  // 这里将实现局部刷新逻辑
+  Serial.println("Partial refresh: " + getFormattedTime());
+  
+  // 局部刷新实现
+  // 定义需要刷新的区域（例如只刷新时间显示区域）
+  uint16_t x = 10;
+  uint16_t y = 30;
+  uint16_t w = 100;
+  uint16_t h = 30;
+  
+  // 使用局部刷新模式
+  display.setPartialWindow(x, y, w, h);
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    display.setTextColor(GxEPD_BLACK);
+    display.setCursor(x, y + 20);
+    display.println("Time: " + getFormattedTime());
+  } while(display.nextPage());
+}
+
+// 显示完整时间界面
+void showTimeDisplay() {
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    display.setTextColor(GxEPD_BLACK);
+    display.setCursor(10, 30);
+    display.println("Current Time:");
+    display.setCursor(20, 60);
+    display.println(getFormattedTime());
+  } while(display.nextPage());
+}
+
+// 获取格式化日期字符串
 String getFormattedDate() {
-  // 获取完整年份（2000 + 两位数年份）
-  int fullYear = 2000 + currentTime.year;
-  
-  // 获取星期几
-  String dayOfWeek = getDayOfWeek(fullYear, currentTime.month, currentTime.day);
-  
-  char dateString[50];
-  sprintf(dateString, "%04d/%02d/%02d %s", fullYear, currentTime.month, currentTime.day, dayOfWeek.c_str());
-  
-  return String(dateString);
+  char buffer[11];
+  sprintf(buffer, "%02d/%02d/%02d", currentTime.year, currentTime.month, currentTime.day);
+  return String(buffer);
 }
 
-String getDayOfWeek(int year, int month, int day) {
-  // 使用Zeller公式计算星期几
-  if (month < 3) {
-    month += 12;
-    year--;
-  }
-  
-  int k = year % 100;
-  int j = year / 100;
-  
-  int h = (day + ((13 * (month + 1)) / 5) + k + (k / 4) + (j / 4) - 2 * j) % 7;
-  
-  // 转换为星期几字符串（0=周六，1=周日，2=周一...）
-  String days[] = {"Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"};
-  return days[h];
-}
-
+// 获取天气信息字符串
 String getWeatherInfo() {
-  // Format weather information for display (temperature and humidity only)
-  char weatherString[20];
-  sprintf(weatherString, "%.1fC %d%%",
-          currentWeather.temperature,
-          currentWeather.humidity);
-  
-  return String(weatherString);
+  char buffer[20];
+  sprintf(buffer, "%.1fC %d%%", currentWeather.temperature, currentWeather.humidity);
+  return String(buffer);
 }
 
+// 获取天气符号
 char getWeatherSymbol() {
-  // Return weather symbol character
   return currentWeather.symbol;
 }
+
+// 获取星期几
+String getDayOfWeek(int year, int month, int day) {
+  // 简单实现，实际应用中可能需要更复杂的算法
+  return "Mon";
+}
+
 // 处理串口输入
 void processSerialInput() {
-  static String inputString = "";
-  
-  while (Serial.available()) {
-    char inChar = (char)Serial.read();
-    
-    if (inChar == '\n') {
-      // 解析输入的时间戳
-      if (inputString.startsWith("T")) {
-        String timestampStr = inputString.substring(1);
-        timestampStr.trim();
-        
-        // 按UTC处理时间戳
-        unsigned long timestamp = timestampStr.toInt();
-        if (timestamp > 0) {
-          // UTC时间转换为本地时间（UTC+8）
-          unsigned long localTimestamp = timestamp + (8 * 3600);
-          setTimeFromTimestamp(localTimestamp);
-          Serial.println("Time synchronized successfully");
-        } else {
-          Serial.println("Invalid timestamp");
-        }
-      }
-      inputString = "";
-    } else {
-      inputString += inChar;
-    }
+  if (Serial.available()) {
+    String input = Serial.readStringUntil('\n');
+    Serial.println("Received: " + input);
   }
 }
 
-// 从Unix时间戳设置时间
+// 从时间戳设置时间
 void setTimeFromTimestamp(unsigned long timestamp) {
-  DateTime newTime = timestampToDateTime(timestamp);
-  currentTime = newTime;
-  lastMillis = millis();
-  
-  // 立即刷新显示并重置刷新计时器
-  unsigned long currentMillis = millis();
-  showTimeDisplay();
-  lastFullRefresh = currentMillis;
-  lastPartialRefresh = currentMillis;
-  lastDisplayedMinute = currentTime.minute;
+  // 简单实现
+  currentTime.second = timestamp % 60;
+  currentTime.minute = (timestamp / 60) % 60;
+  currentTime.hour = (timestamp / 3600) % 24;
 }
 
-// 判断是否为闰年
-bool isLeapYear(int year) {
-  return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
-}
-
-// 获取指定月份的天数
-int daysInMonth(int month, int year) {
-  switch (month) {
-    case 2: return isLeapYear(year) ? 29 : 28;
-    case 4: case 6: case 9: case 11: return 30;
-    default: return 31;
-  }
-}
-
-// 将Unix时间戳转换为DateTime结构
+// 时间戳转换为日期时间结构
 DateTime timestampToDateTime(unsigned long timestamp) {
   DateTime dt;
-  
-  // 计算秒、分、时
   dt.second = timestamp % 60;
-  timestamp /= 60;
-  dt.minute = timestamp % 60;
-  timestamp /= 60;
-  dt.hour = timestamp % 24;
-  timestamp /= 24;
-  
-  // 计算年、月、日（从1970年1月1日开始计算）
-  int days = timestamp;
-  dt.year = 1970;
-  dt.month = 1;
+  dt.minute = (timestamp / 60) % 60;
+  dt.hour = (timestamp / 3600) % 24;
+  // 简化实现，实际应用中需要更复杂的日期计算
   dt.day = 1;
-  
-  // 计算年份
-  while (days >= (isLeapYear(dt.year) ? 366 : 365)) {
-    int daysInYear = isLeapYear(dt.year) ? 366 : 365;
-    days -= daysInYear;
-    dt.year++;
-  }
-  
-  // 计算月份
-  while (days >= daysInMonth(dt.month, dt.year)) {
-    days -= daysInMonth(dt.month, dt.year);
-    dt.month++;
+  dt.month = 1;
+  dt.year = 2025;
+  return dt;
+}
+
+void loop() {
+  // 每秒更新一次时间显示
+  if (millis() - lastMillis >= 1000) {
+    lastMillis = millis();
+    updateTime();
     
-    if (dt.month > 12) {
-      dt.month = 1;
-      dt.year++;
+    // 每分钟进行一次局部刷新
+    if (currentTime.minute != lastDisplayedMinute) {
+      showPartialTimeDisplay();
+      lastDisplayedMinute = currentTime.minute;
     }
   }
   
-  // 计算日期
-  dt.day += days;
-  
-  // 调整年份为两位数格式（与原代码兼容）
-  dt.year = dt.year % 100;
-  
-  return dt;
+  // 处理串口输入
+  processSerialInput();
 }
