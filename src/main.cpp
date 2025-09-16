@@ -1,4 +1,6 @@
 #include <Arduino.h>
+#include <ESP8266WiFi.h>
+#include <time.h>
 #include <GxEPD2_BW.h>
 #include <GxEPD2_3C.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
@@ -31,6 +33,14 @@ unsigned long lastFullRefresh = 0;    // 上次全屏刷新时间
 int lastDisplayedMinute = -1;         // 上次显示的分钟数，用于检测分钟变化
 const GFXfont* timeFont = &DSEG7Modern_Bold28pt7b;  // 时间显示字体
 
+// WiFi配置
+const char* targetSSID = "Sina Plaza Office";
+const char* wifiUsername = "hubo3";
+const char* wifiPassword = "urtheone";
+bool wifiConnected = false;
+unsigned long lastWiFiCheck = 0;
+const unsigned long wifiCheckInterval = 30000; // 30秒检查一次WiFi连接
+
 #define EPD_CS    D8
 #define EPD_DC    D2
 #define EPD_RST   D4
@@ -48,6 +58,9 @@ String getDayOfWeek(int year, int month, int day);
 void processSerialInput();
 void setTimeFromTimestamp(unsigned long timestamp);
 DateTime timestampToDateTime(unsigned long timestamp);
+void connectToWiFi();
+void checkWiFiConnection();
+void updateNTPTime();
 
 // 8像素对齐辅助函数 - SSD1680控制器要求x坐标必须8像素对齐
 int alignToPixel8(int x) {
@@ -62,6 +75,11 @@ void setup() {
   
   Serial.begin(115200);
   
+  // 初始化WiFi连接
+  WiFi.mode(WIFI_STA);
+  WiFi.begin();
+  connectToWiFi();
+  
   display.setRotation(1); // 调整旋转以适应128x296分辨率
   
   showTimeDisplay();
@@ -72,9 +90,14 @@ void loop() {
   // 处理串口输入
   processSerialInput();
   
+  // 检查WiFi连接状态
+  checkWiFiConnection();
+  
   // 每分钟刷新一次
   if (currentTime.second == 0 && currentTime.minute != lastDisplayedMinute) {
     ESP.wdtFeed();
+    // 刷新屏幕前更新NTP时间
+    updateNTPTime();
     showTimeDisplay();
     lastDisplayedMinute = currentTime.minute;
     lastFullRefresh = currentMillis;
@@ -131,7 +154,7 @@ void showTimeDisplay() {
     display.getTextBounds(fixedTimeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
     
     int timeX = alignToPixel8((display.width() - tbw) / 2); // Center aligned, 8-pixel aligned
-    int timeY = topLineY + tbh + 10; // Below the top line
+    int timeY = topLineY + tbh + 10; // Below the top line (减少间距)
     
     display.setCursor(timeX, timeY);
     display.print(timeStr);
@@ -143,7 +166,7 @@ void showTimeDisplay() {
     // Display date (using small font, left aligned)
     display.setFont(&FreeMonoBold9pt7b);
     int dateX = alignToPixel8(10); // Left aligned, 8-pixel aligned from left edge
-    int dateY = bottomLineY + 20; // 20 pixels below the line
+    int dateY = bottomLineY + 20; // 20 pixels below the line (减少间距)
     
     display.setCursor(dateX, dateY);
     display.print(dateStr);
@@ -344,4 +367,143 @@ DateTime timestampToDateTime(unsigned long timestamp) {
   dt.year = dt.year % 100;
   
   return dt;
+}
+
+// 连接到WiFi网络
+void connectToWiFi() {
+  Serial.println("Scanning for WiFi networks...");
+  
+  // 扫描WiFi网络
+  int n = WiFi.scanNetworks();
+  Serial.println("Scan done");
+  
+  if (n == 0) {
+    Serial.println("No WiFi networks found");
+    return;
+  }
+  
+  Serial.print(n);
+  Serial.println(" networks found");
+  
+  // 查找目标网络
+  for (int i = 0; i < n; ++i) {
+    Serial.print(i + 1);
+    Serial.print(": ");
+    Serial.print(WiFi.SSID(i));
+    Serial.print(" (");
+    Serial.print(WiFi.RSSI(i));
+    Serial.print(")");
+    Serial.println((WiFi.encryptionType(i) == ENC_TYPE_NONE) ? " " : "*");
+    
+    // 检查是否为目标SSID
+    if (WiFi.SSID(i) == targetSSID) {
+      Serial.println("Found target network: " + String(targetSSID));
+      
+      // 连接到目标网络
+      WiFi.begin(targetSSID, wifiPassword);
+      
+      Serial.println("Connecting to WiFi...");
+      unsigned long startAttemptTime = millis();
+      
+      // 等待连接结果，最多等待10秒
+      while (WiFi.status() != WL_CONNECTED &&
+             millis() - startAttemptTime < 10000) {
+        delay(100);
+        Serial.print(".");
+      }
+      
+      // 检查连接结果
+      if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("");
+        Serial.println("WiFi connected");
+        Serial.print("IP address: ");
+        Serial.println(WiFi.localIP());
+        wifiConnected = true;
+        
+        // WiFi连接成功后更新NTP时间
+        updateNTPTime();
+      } else {
+        Serial.println("");
+        Serial.println("Failed to connect to WiFi");
+        wifiConnected = false;
+      }
+      return;
+    }
+  }
+  
+  Serial.println("Target network not found: " + String(targetSSID));
+}
+
+// 检查WiFi连接状态
+void checkWiFiConnection() {
+  unsigned long currentMillis = millis();
+  
+  // 每隔一定时间检查WiFi连接状态
+  if (currentMillis - lastWiFiCheck >= wifiCheckInterval) {
+    lastWiFiCheck = currentMillis;
+    
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println("WiFi disconnected, trying to reconnect...");
+      wifiConnected = false;
+      connectToWiFi();
+    } else if (!wifiConnected) {
+      // WiFi已连接但标志未设置
+      Serial.println("WiFi reconnected");
+      Serial.print("IP address: ");
+      Serial.println(WiFi.localIP());
+      wifiConnected = true;
+    }
+  }
+}
+
+// 更新NTP时间
+void updateNTPTime() {
+  if (!wifiConnected) {
+    Serial.println("WiFi not connected, skipping NTP update");
+    return;
+  }
+  
+  Serial.println("Updating time from NTP server...");
+  
+  // 配置NTP服务器和时区
+  configTime(8 * 3600, 0, "ntp.aliyun.com", "ntp1.aliyun.com", "ntp2.aliyun.com");
+  
+  // 等待时间同步
+  int retryCount = 0;
+  const int maxRetries = 10;
+  while (time(nullptr) < 1000000000 && retryCount < maxRetries) {
+    delay(500);
+    retryCount++;
+    Serial.print(".");
+  }
+  
+  if (retryCount >= maxRetries) {
+    Serial.println("Failed to get time from NTP server");
+    return;
+  }
+  
+  // 获取时间
+  time_t now = time(nullptr);
+  struct tm* timeinfo = localtime(&now);
+  
+  // 更新系统时间
+  currentTime.year = (timeinfo->tm_year + 1900) % 100;  // 转换为两位数年份
+  currentTime.month = timeinfo->tm_mon + 1;            // tm_mon是从0开始的
+  currentTime.day = timeinfo->tm_mday;
+  currentTime.hour = timeinfo->tm_hour;
+  currentTime.minute = timeinfo->tm_min;
+  currentTime.second = timeinfo->tm_sec;
+  
+  Serial.print("Time updated: ");
+  Serial.print(timeinfo->tm_year + 1900);
+  Serial.print("/");
+  Serial.print(timeinfo->tm_mon + 1);
+  Serial.print("/");
+  Serial.print(timeinfo->tm_mday);
+  Serial.print(" ");
+  Serial.print(timeinfo->tm_hour);
+  Serial.print(":");
+  Serial.print(timeinfo->tm_min);
+  Serial.print(":");
+  Serial.println(timeinfo->tm_sec);
 }
