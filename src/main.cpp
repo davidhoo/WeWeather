@@ -1,11 +1,14 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <time.h>
 #include <GxEPD2_BW.h>
 #include <GxEPD2_3C.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
 #include "Weather_Symbols_Regular9pt7b.h"
 #include "DSEG7Modern_Bold28pt7b.h"
+#include <ArduinoJson.h>
 
 // GDEY029T94 2.9寸黑白墨水屏 128x296 (使用SSD1680控制器)
 struct DateTime {
@@ -19,18 +22,23 @@ struct DateTime {
 
 // Weather information structure
 struct WeatherInfo {
-  float temperature;    // Temperature in Celsius
-  int humidity;         // Humidity percentage
-  char symbol;          // Weather symbol character
+  float Temperature;    // Temperature in Celsius
+  int Humidity;         // Humidity percentage
+  char Symbol;          // Weather symbol character
+  String WindDirection; // 风向
+  String WindSpeed;     // 风速
+  String Weather;       // 天气状况
   // Weather symbol mapping:
   // n=晴(sunny), d=雪(snow), m=雨(rain), l=雾(fog), c=阴(overcast), o=多云(cloudy), k=雷雨(thunderstorm)
 };
 
 DateTime currentTime = {25, 9, 10, 20, 1, 34};
-WeatherInfo currentWeather = {23.5, 65, 'n'}; // 23.5°C, 65% humidity, sunny
+WeatherInfo currentWeather = {23.5, 65, 'n', "北", "≤3", "晴"}; // 23.5°C, 65% humidity, sunny
 unsigned long lastMillis = 0;
 unsigned long lastFullRefresh = 0;    // 上次全屏刷新时间
 int lastDisplayedMinute = -1;         // 上次显示的分钟数，用于检测分钟变化
+unsigned long lastWeatherUpdate = 0;  // 上次天气更新时间
+const unsigned long weatherUpdateInterval = 30 * 60 * 1000; // 30分钟更新一次天气
 const GFXfont* timeFont = &DSEG7Modern_Bold28pt7b;  // 时间显示字体
 
 // WiFi配置
@@ -61,6 +69,11 @@ DateTime timestampToDateTime(unsigned long timestamp);
 void connectToWiFi();
 void checkWiFiConnection();
 void updateNTPTime();
+void updateWeatherInfo();
+bool fetchWeatherData();
+char mapWeatherToSymbol(const String& weather);
+String translateWindDirection(const String& chineseDirection);
+String formatWindSpeed(const String& windSpeed);
 
 // 8像素对齐辅助函数 - SSD1680控制器要求x坐标必须8像素对齐
 int alignToPixel8(int x) {
@@ -101,6 +114,11 @@ void loop() {
     showTimeDisplay();
     lastDisplayedMinute = currentTime.minute;
     lastFullRefresh = currentMillis;
+  }
+  
+  // 每30分钟更新一次天气信息
+  if (currentMillis - lastWeatherUpdate >= weatherUpdateInterval) {
+    updateWeatherInfo();
   }
   
   updateTime();
@@ -254,20 +272,22 @@ String getDayOfWeek(int year, int month, int day) {
   String days[] = {"Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"};
   return days[h];
 }
-
 String getWeatherInfo() {
-  // Format weather information for display (temperature and humidity only)
-  char weatherString[20];
-  sprintf(weatherString, "%.1fC %d%%",
-          currentWeather.temperature,
-          currentWeather.humidity);
+  // Format weather information for display
+  String weatherString = "";
   
-  return String(weatherString);
+  // 按照新格式显示天气信息: 22C 46% NortheEast ≤3
+  weatherString += String(currentWeather.Temperature, 0) + "C ";
+  weatherString += String(currentWeather.Humidity) + "% ";
+  weatherString += translateWindDirection(currentWeather.WindDirection) + " ";
+  weatherString += currentWeather.WindSpeed;
+  
+  return weatherString;
 }
 
 char getWeatherSymbol() {
   // Return weather symbol character
-  return currentWeather.symbol;
+  return currentWeather.Symbol;
 }
 // 处理串口输入
 void processSerialInput() {
@@ -422,6 +442,9 @@ void connectToWiFi() {
         
         // WiFi连接成功后更新NTP时间
         updateNTPTime();
+        
+        // WiFi连接成功后更新天气信息
+        updateWeatherInfo();
       } else {
         Serial.println("");
         Serial.println("Failed to connect to WiFi");
@@ -506,4 +529,142 @@ void updateNTPTime() {
   Serial.print(timeinfo->tm_min);
   Serial.print(":");
   Serial.println(timeinfo->tm_sec);
+}
+
+// 获取天气数据
+bool fetchWeatherData() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi not connected, skipping weather update");
+    return false;
+  }
+
+  HTTPClient http;
+  WiFiClientSecure client;
+  // API URL
+  String url = "https://restapi.amap.com/v3/weather/weatherInfo?key=b4bed4011e9375d01423a45fba58e836&city=110108&extensions=base&output=JSON";
+  
+  Serial.println("Fetching weather data from: " + url);
+  
+  client.setInsecure(); // 跳过SSL证书验证
+  http.begin(client, url);
+  http.setTimeout(5000); // 5秒超时
+  
+  int httpResponseCode = http.GET();
+  
+  if (httpResponseCode == 200) {
+    String payload = http.getString();
+    Serial.println("Weather data received: " + payload);
+    
+    // 解析JSON数据
+    DynamicJsonDocument doc(4096); // 根据实际需要调整大小
+    DeserializationError error = deserializeJson(doc, payload);
+    
+    if (error) {
+      Serial.println("Failed to parse JSON: " + String(error.c_str()));
+      http.end();
+      return false;
+    }
+    
+    // 检查status是否为"1"
+    String status = doc["status"].as<String>();
+    if (status != "1") {
+      Serial.println("API returned error status: " + status);
+      http.end();
+      return false;
+    }
+    
+    // 获取lives数据
+    JsonObject lives = doc["lives"][0];
+    
+    // 更新WeatherInfo
+    currentWeather.Temperature = lives["temperature"].as<float>();
+    currentWeather.Humidity = lives["humidity"].as<int>();
+    currentWeather.WindDirection = lives["winddirection"].as<String>();
+    currentWeather.WindSpeed = formatWindSpeed(lives["windpower"].as<String>());
+    currentWeather.Weather = lives["weather"].as<String>();
+    
+    // 根据天气状况设置符号
+    currentWeather.Symbol = mapWeatherToSymbol(currentWeather.Weather);
+    
+    Serial.println("Weather updated successfully");
+    Serial.println("Temperature: " + String(currentWeather.Temperature));
+    Serial.println("Humidity: " + String(currentWeather.Humidity));
+    Serial.println("Wind Direction: " + currentWeather.WindDirection);
+    Serial.println("Wind Speed: " + currentWeather.WindSpeed);
+    Serial.println("Weather: " + currentWeather.Weather);
+    Serial.println("Symbol: " + String(currentWeather.Symbol));
+    
+    http.end();
+    return true;
+  } else {
+    Serial.println("HTTP request failed with code: " + String(httpResponseCode));
+    http.end();
+    return false;
+  }
+}
+
+// 更新天气信息
+void updateWeatherInfo() {
+  Serial.println("Updating weather information...");
+  if (fetchWeatherData()) {
+    // 天气更新成功，刷新显示
+    showTimeDisplay();
+  }
+  lastWeatherUpdate = millis();
+}
+
+// 将天气状况映射到符号
+char mapWeatherToSymbol(const String& weather) {
+  // Weather symbol mapping:
+  // n=晴(sunny), d=雪(snow), m=雨(rain), l=雾(fog), c=阴(overcast), o=多云(cloudy), k=雷雨(thunderstorm)
+  
+  if (weather.indexOf("晴") >= 0) {
+    return 'n'; // 晴天
+  } else if (weather.indexOf("雷") >= 0 && weather.indexOf("雨") >= 0) {
+    return 'k'; // 雷雨
+  } else if (weather.indexOf("雪") >= 0) {
+    return 'd'; // 雪
+  } else if (weather.indexOf("雨") >= 0) {
+    return 'm'; // 雨
+  } else if (weather.indexOf("雷") >= 0) {
+    return 'a'; // 雷
+  } else if (weather.indexOf("雾") >= 0) {
+    return 'l'; // 雾
+  } else if (weather.indexOf("阴") >= 0) {
+    return 'c'; // 阴
+  } else if (weather.indexOf("多云") >= 0) {
+    return 'o'; // 多云
+  }else if (weather.indexOf("少云") >= 0) {
+    return 'p'; // 少云
+  } else if (weather.indexOf("晴间多云") >= 0) {
+    return 'c'; // 晴间多云
+  } else if (weather.indexOf("风") >= 0) {
+    return 'f'; // 风
+  } else if (weather.indexOf("冷") >= 0) {
+    return 'e'; // 冷
+  } else if (weather.indexOf("热") >= 0) {
+    return 'h'; // 热
+  } else {
+    return 'n'; // 默认晴天 abcdefghijklmnop
+  }
+}
+// 将中文风向转换为英文
+String translateWindDirection(const String& chineseDirection) {
+  if (chineseDirection == "东") return "East";
+  if (chineseDirection == "西") return "West";
+  if (chineseDirection == "南") return "South";
+  if (chineseDirection == "北") return "North";
+  if (chineseDirection == "东北") return "Northeast";
+  if (chineseDirection == "西北") return "Northwest";
+  if (chineseDirection == "东南") return "Southeast";
+  if (chineseDirection == "西南") return "Southwest";
+  return chineseDirection; // 如果没有匹配的，返回原始值
+}
+
+// 格式化风速字符串，将≤替换成<=，≥替换成>=
+String formatWindSpeed(const String& windSpeed) {
+  String formatted = windSpeed;
+  formatted.replace("≤", "<=");
+  formatted.replace("≥", ">=");
+  return formatted;
 }
