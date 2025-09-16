@@ -2,8 +2,8 @@
 #include <GxEPD2_BW.h>
 #include <GxEPD2_3C.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
-#include "SevenSegment42pt7b.h"
 #include "Weather_Symbols_Regular9pt7b.h"
+#include "DSEG7Modern_Bold28pt7b.h"
 
 // GDEY029T94 2.9寸黑白墨水屏 128x296 (使用SSD1680控制器)
 struct DateTime {
@@ -28,9 +28,8 @@ DateTime currentTime = {25, 9, 10, 20, 1, 34};
 WeatherInfo currentWeather = {23.5, 65, 'n'}; // 23.5°C, 65% humidity, sunny
 unsigned long lastMillis = 0;
 unsigned long lastFullRefresh = 0;    // 上次全屏刷新时间
-unsigned long lastPartialRefresh = 0; // 上次局部刷新时间
 int lastDisplayedMinute = -1;         // 上次显示的分钟数，用于检测分钟变化
-bool isFirstPartialRefresh = true;    // 标记是否为第一次局部刷新
+const GFXfont* timeFont = &DSEG7Modern_Bold28pt7b;  // 时间显示字体
 
 #define EPD_CS    D8
 #define EPD_DC    D2
@@ -40,7 +39,6 @@ bool isFirstPartialRefresh = true;    // 标记是否为第一次局部刷新
 GxEPD2_BW<GxEPD2_290_GDEY029T94, GxEPD2_290_GDEY029T94::WIDTH> display(GxEPD2_290_GDEY029T94(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
 
 void showTimeDisplay();
-void showPartialTimeDisplay(); // 局部刷新时钟区域
 void updateTime();
 String getFormattedTime();
 String getFormattedDate();
@@ -51,21 +49,20 @@ void processSerialInput();
 void setTimeFromTimestamp(unsigned long timestamp);
 DateTime timestampToDateTime(unsigned long timestamp);
 
+// 8像素对齐辅助函数 - SSD1680控制器要求x坐标必须8像素对齐
+int alignToPixel8(int x) {
+  return (x / 8) * 8;
+}
+
 void setup() {
   lastMillis = millis();
   lastFullRefresh = millis();
-  lastPartialRefresh = millis();
   lastDisplayedMinute = currentTime.minute;
-  isFirstPartialRefresh = true;
   display.init();
   
   Serial.begin(115200);
-  Serial.println("Display initialization...");
-  Serial.printf("Before rotation - Width: %d, Height: %d\n", display.width(), display.height());
   
   display.setRotation(1); // 调整旋转以适应128x296分辨率
-  Serial.printf("After setRotation(1) - Width: %d, Height: %d\n", display.width(), display.height());
-  Serial.println("Expected: Width=296, Height=128 (after 90° rotation)");
   
   showTimeDisplay();
 }
@@ -74,27 +71,13 @@ void loop() {
   
   // 处理串口输入
   processSerialInput();
-  // 检查是否需要刷新（分钟变化时）
-  bool needRefresh = (currentTime.minute != lastDisplayedMinute);
   
-  // 检查是否需要强制全屏刷新（半小时 = 1800000毫秒）
-  bool needForceRefresh = (currentMillis - lastFullRefresh >= 1800000);
-  
-  
-  if (needRefresh || needForceRefresh) {
+  // 每分钟刷新一次
+  if (currentTime.second == 0 && currentTime.minute != lastDisplayedMinute) {
     ESP.wdtFeed();
-    if (needForceRefresh) {
-      Serial.println("Performing forced full refresh (30min cycle)");
-      lastFullRefresh = currentMillis;
-      isFirstPartialRefresh = true; // 重置局部刷新标记
-      showTimeDisplay();
-    } else {
-      Serial.println("Performing minute refresh");
-      showPartialTimeDisplay(); // 使用局部刷新替代全屏刷新
-      isFirstPartialRefresh = false; // 标记已进行过局部刷新
-    }
-    lastPartialRefresh = currentMillis;
+    showTimeDisplay();
     lastDisplayedMinute = currentTime.minute;
+    lastFullRefresh = currentMillis;
   }
   
   updateTime();
@@ -115,7 +98,7 @@ void showTimeDisplay() {
     
     // Display weather info (using small font, left aligned)
     display.setFont(&FreeMonoBold9pt7b);
-    int weatherX = 10; // Left aligned, 10 pixels from left edge
+    int weatherX = alignToPixel8(10); // Left aligned, 8-pixel aligned from left edge
     int weatherY = 15; // Top position
     
     display.setCursor(weatherX, weatherY);
@@ -128,7 +111,7 @@ void showTimeDisplay() {
     uint16_t sbw, sbh;
     display.getTextBounds(symbolStr, 0, 0, &sbx, &sby, &sbw, &sbh);
     
-    int symbolX = display.width() - sbw - 10; // Right aligned, 10 pixels from right edge
+    int symbolX = alignToPixel8(display.width() - sbw - 10); // Right aligned, 8-pixel aligned
     int symbolY = weatherY; // Same Y position as weather info
     
     display.setCursor(symbolX, symbolY);
@@ -136,10 +119,10 @@ void showTimeDisplay() {
     
     // Draw line below weather info
     int topLineY = weatherY + 5;
-    display.drawLine(10, topLineY, display.width() - 10, topLineY, GxEPD_BLACK);
+    display.drawLine(alignToPixel8(10), topLineY, display.width() - alignToPixel8(10), topLineY, GxEPD_BLACK);
     
     // Display time (using large font, centered with fixed position)
-    display.setFont(&SevenSegment42pt7b);
+    display.setFont(timeFont);
     
     // 使用固定的时间字符串"00:00"来计算居中位置，确保位置不变
     String fixedTimeStr = "00:00";
@@ -147,7 +130,7 @@ void showTimeDisplay() {
     uint16_t tbw, tbh;
     display.getTextBounds(fixedTimeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
     
-    int timeX = (display.width() - tbw) / 2;
+    int timeX = alignToPixel8((display.width() - tbw) / 2); // Center aligned, 8-pixel aligned
     int timeY = topLineY + tbh + 10; // Below the top line
     
     display.setCursor(timeX, timeY);
@@ -155,11 +138,11 @@ void showTimeDisplay() {
     
     // Draw line below time
     int bottomLineY = timeY + 10;
-    display.drawLine(10, bottomLineY, display.width() - 10, bottomLineY, GxEPD_BLACK);
+    display.drawLine(alignToPixel8(10), bottomLineY, display.width() - alignToPixel8(10), bottomLineY, GxEPD_BLACK);
     
     // Display date (using small font, left aligned)
     display.setFont(&FreeMonoBold9pt7b);
-    int dateX = 10; // Left aligned, 10 pixels from left edge
+    int dateX = alignToPixel8(10); // Left aligned, 8-pixel aligned from left edge
     int dateY = bottomLineY + 20; // 20 pixels below the line
     
     display.setCursor(dateX, dateY);
@@ -168,188 +151,6 @@ void showTimeDisplay() {
   } while (display.nextPage());
   
   display.hibernate();
-}
-
-void showPartialTimeDisplay() {
-  Serial.println("Starting partial refresh...");
-  Serial.printf("Screen dimensions after rotation: %dx%d (width x height)\n", display.width(), display.height());
-  Serial.printf("Original screen spec: 128x296, Rotation: 1 (90 degrees)\n");
-  Serial.printf("Expected after rotation: 296x128 (width x height)\n");
-  
-  // 如果是第一次局部刷新，需要先进行一次完整的屏幕缓冲区初始化
-  if (isFirstPartialRefresh) {
-    Serial.println("First partial refresh - initializing screen buffer");
-    // 先进行一次完整的屏幕初始化以建立正确的缓冲区状态
-    display.setFullWindow();
-    display.firstPage();
-    do {
-      display.fillScreen(GxEPD_WHITE);
-      display.setTextColor(GxEPD_BLACK);
-      
-      // 重新绘制完整界面但不刷新到屏幕
-      // 这样可以确保缓冲区状态正确
-      String weatherStr = getWeatherInfo();
-      display.setFont(&FreeMonoBold9pt7b);
-      display.setCursor(10, 15);
-      display.print(weatherStr);
-      
-      // 绘制天气符号
-      display.setFont(&Weather_Symbols_Regular9pt7b);
-      char symbolStr[2] = {getWeatherSymbol(), '\0'};
-      int16_t sbx, sby;
-      uint16_t sbw, sbh;
-      display.getTextBounds(symbolStr, 0, 0, &sbx, &sby, &sbw, &sbh);
-      int symbolX = display.width() - sbw - 10;
-      display.setCursor(symbolX, 15);
-      display.print(symbolStr);
-      
-      // 绘制线条
-      display.drawLine(10, 20, display.width() - 10, 20, GxEPD_BLACK);
-      
-      // 绘制时间
-      display.setFont(&SevenSegment42pt7b);
-      String fixedTimeStr = "00:00";
-      int16_t tbx, tby;
-      uint16_t tbw, tbh;
-      display.getTextBounds(fixedTimeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
-      int timeX = (display.width() - tbw) / 2;
-      int timeY = 20 + tbh + 10;
-      display.setCursor(timeX, timeY);
-      display.print(getFormattedTime());
-      
-      // 绘制底部线条和日期
-      display.drawLine(10, timeY + 10, display.width() - 10, timeY + 10, GxEPD_BLACK);
-      display.setFont(&FreeMonoBold9pt7b);
-      display.setCursor(10, timeY + 30);
-      display.print(getFormattedDate());
-      
-    } while (display.nextPage());
-    
-    Serial.println("Screen buffer initialized for partial refresh");
-    delay(100); // 确保初始化完成
-  }
-  
-  // 获取完整的时间字符串
-  String timeStr = getFormattedTime();
-  Serial.printf("Time string: %s\n", timeStr.c_str());
-  
-  // 使用与showTimeDisplay完全相同的坐标计算（固定位置）
-  display.setFont(&SevenSegment42pt7b);
-  
-  // 使用固定的时间字符串"00:00"来计算居中位置，确保位置不变
-  String fixedTimeStr = "00:00";
-  int16_t tbx, tby;
-  uint16_t tbw, tbh;
-  display.getTextBounds(fixedTimeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
-  Serial.printf("Fixed time bounds: tbx=%d, tby=%d, tbw=%d, tbh=%d\n", tbx, tby, tbw, tbh);
-  
-  int timeX = (display.width() - tbw) / 2;
-  int weatherY = 15; // 与showTimeDisplay中的weatherY保持一致
-  int topLineY = weatherY + 5;
-  int timeY = topLineY + tbh + 10;
-  Serial.printf("Time position: timeX=%d, timeY=%d\n", timeX, timeY);
-  
-  // 计算分钟部分的位置（时间字符串的第4和第5个字符）
-  // 时间格式为"HH:MM"，分钟部分是最后两个字符
-  String hourPart = "00:"; // 前面的部分
-  int16_t hourTbx, hourTby;
-  uint16_t hourTbw, hourTbh;
-  display.getTextBounds(hourPart, 0, 0, &hourTbx, &hourTby, &hourTbw, &hourTbh);
-  Serial.printf("Hour part bounds: hourTbw=%d\n", hourTbw);
-  
-  // 分钟部分的起始X坐标
-  int minuteX = timeX + hourTbw;
-  Serial.printf("Calculated minuteX: %d (timeX=%d + hourTbw=%d)\n", minuteX, timeX, hourTbw);
-  
-  // 计算分钟部分的宽度 - 使用"00"来确保宽度一致
-  String minuteTemplate = "00";
-  int16_t minuteTbx, minuteTby;
-  uint16_t minuteTbw, minuteTbh;
-  display.getTextBounds(minuteTemplate, 0, 0, &minuteTbx, &minuteTby, &minuteTbw, &minuteTbh);
-  Serial.printf("Minute template bounds: minuteTbw=%d\n", minuteTbw);
-  
-  // 检查坐标是否超出屏幕范围
-  // 检查坐标是否超出屏幕范围
-  Serial.printf("Screen width: %d, Screen height: %d\n", display.width(), display.height());
-  Serial.printf("Checking minuteX (%d) against screen width (%d)\n", minuteX, display.width());
-  
-  if (minuteX >= display.width()) {
-    Serial.printf("ERROR: minuteX (%d) exceeds screen width (%d)!\n", minuteX, display.width());
-    Serial.println("Using fallback: refresh entire time area");
-    // 使用整个时间区域进行局部刷新
-    int windowX = 0; // 从屏幕左边开始
-    int windowY = timeY - tbh - 2; // 文本的顶部位置
-    int windowW = display.width(); // 整个屏幕宽度
-    int windowH = tbh + 4; // 文本高度加边距
-    
-    // 确保窗口在屏幕范围内
-    if (windowY < 0) windowY = 0;
-    if (windowY + windowH > display.height()) windowH = display.height() - windowY;
-    
-    Serial.printf("Fallback window: X=%d, Y=%d, W=%d, H=%d\n", windowX, windowY, windowW, windowH);
-    
-    // 使用GxEPD2的标准局部刷新方法
-    display.setPartialWindow(windowX, windowY, windowW, windowH);
-    display.firstPage();
-    do {
-      // 清除整个时间区域
-      display.fillRect(windowX, windowY, windowW, windowH, GxEPD_WHITE);
-      
-      // 重新绘制完整的时间字符串
-      display.setTextColor(GxEPD_BLACK);
-      display.setFont(&SevenSegment42pt7b);
-      display.setCursor(timeX, timeY);
-      display.print(timeStr);
-      
-    } while (display.nextPage());
-    
-  } else {
-    // 改为刷新整个时间区域，确保更可靠的刷新效果
-    // 使用整个时间字符串的区域而不是仅分钟部分
-    int windowX = (timeX / 8) * 8; // 对齐到8像素边界，从时间开始位置
-    int windowY = timeY - tbh - 2; // 文本的顶部位置
-    int windowW = ((tbw + 15) / 8) * 8; // 使用完整时间宽度，对齐到8像素边界
-    int windowH = tbh + 4; // 增加边距
-    
-    Serial.printf("Before bounds check - windowX=%d, windowY=%d, windowW=%d, windowH=%d\n",
-                  windowX, windowY, windowW, windowH);
-    
-    // 确保窗口在屏幕范围内
-    if (windowX < 0) windowX = 0;
-    if (windowY < 0) windowY = 0;
-    if (windowX + windowW > display.width()) windowW = display.width() - windowX;
-    if (windowY + windowH > display.height()) windowH = display.height() - windowY;
-    
-    Serial.printf("Partial window: X=%d, Y=%d, W=%d, H=%d\n", windowX, windowY, windowW, windowH);
-    Serial.printf("Minute text position: X=%d, Y=%d\n", minuteX, timeY);
-    
-    // 使用GxEPD2的标准局部刷新方法
-    display.setPartialWindow(windowX, windowY, windowW, windowH);
-    display.firstPage();
-    do {
-      // 清除整个时间区域
-      display.fillRect(windowX, windowY, windowW, windowH, GxEPD_WHITE);
-      
-      // 重新绘制完整的时间字符串
-      display.setTextColor(GxEPD_BLACK);
-      display.setFont(&SevenSegment42pt7b);
-      
-      Serial.printf("Drawing complete time: %s at position (%d, %d)\n", timeStr.c_str(), timeX, timeY);
-      display.setCursor(timeX, timeY);
-      display.print(timeStr);
-      
-    } while (display.nextPage());
-    
-    Serial.println("Calling display.refresh() to force screen update...");
-    display.refresh(); // 强制刷新屏幕
-  }
-  
-  // 重要：调用hibernate来完成刷新过程
-  display.hibernate();
-  
-  // 添加延时确保刷新完成
-  delay(200); // 增加延时确保墨水屏刷新完成
-  Serial.println("Partial refresh completed.");
 }
 
 void updateTime() {
@@ -464,9 +265,6 @@ void processSerialInput() {
           // UTC时间转换为本地时间（UTC+8）
           unsigned long localTimestamp = timestamp + (8 * 3600);
           setTimeFromTimestamp(localTimestamp);
-          Serial.println("Time synchronized successfully");
-        } else {
-          Serial.println("Invalid timestamp");
         }
       }
       inputString = "";
@@ -486,7 +284,6 @@ void setTimeFromTimestamp(unsigned long timestamp) {
   unsigned long currentMillis = millis();
   showTimeDisplay();
   lastFullRefresh = currentMillis;
-  lastPartialRefresh = currentMillis;
   lastDisplayedMinute = currentTime.minute;
 }
 
