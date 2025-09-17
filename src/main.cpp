@@ -51,7 +51,7 @@ const unsigned long wifiCheckInterval = 30000; // 30秒检查一次WiFi连接
 
 #define EPD_CS    D8
 #define EPD_DC    D2
-#define EPD_RST   D4
+#define EPD_RST   D0
 #define EPD_BUSY  D1
 // 原始定义可能存在width/height混淆，尝试使用WIDTH而不是HEIGHT
 GxEPD2_BW<GxEPD2_290_GDEY029T94, GxEPD2_290_GDEY029T94::WIDTH> display(GxEPD2_290_GDEY029T94(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
