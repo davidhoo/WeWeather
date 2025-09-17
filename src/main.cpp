@@ -84,6 +84,9 @@ void setup() {
   lastMillis = millis();
   lastFullRefresh = millis();
   lastDisplayedMinute = currentTime.minute;
+  
+  // 在初始化显示之前设置旋转，确保第一次显示正确旋转
+  display.setRotation(1); // 调整旋转以适应128x296分辨率
   display.init();
   
   Serial.begin(115200);
@@ -92,8 +95,6 @@ void setup() {
   WiFi.mode(WIFI_STA);
   WiFi.begin();
   connectToWiFi();
-  
-  display.setRotation(1); // 调整旋转以适应128x296分辨率
   
   showTimeDisplay();
 }
