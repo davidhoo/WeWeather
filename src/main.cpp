@@ -10,16 +10,7 @@
 #include "DSEG7Modern_Bold28pt7b.h"
 #include <ArduinoJson.h>
 #include <Wire.h>
-
-// BM8563 RTC 常量定义
-#define BM8563_I2C_ADDRESS 0x51
-#define BM8563_REG_SECONDS 0x02
-#define BM8563_REG_MINUTES 0x03
-#define BM8563_REG_HOURS   0x04
-#define BM8563_REG_DAYS    0x05
-#define BM8563_REG_MONTHS  0x07
-#define BM8563_REG_YEARS   0x08
-#define BM8563_REG_WEEKDAYS 0x06
+#include "../lib/BM8563/BM8563.h"
 
 // I2C引脚定义 (根据用户提供的连接)
 #define SDA_PIN 2  // GPIO-2 (D4)
@@ -56,6 +47,9 @@ unsigned long lastWeatherUpdate = 0;  // 上次天气更新时间
 const unsigned long weatherUpdateInterval = 30 * 60 * 1000; // 30分钟更新一次天气
 const GFXfont* timeFont = &DSEG7Modern_Bold28pt7b;  // 时间显示字体
 
+// 创建BM8563对象实例
+BM8563 rtc(SDA_PIN, SCL_PIN);
+
 // WiFi配置
 const char* targetSSID = "Sina Plaza Office";
 const char* wifiUsername = "hubo3";
@@ -91,11 +85,8 @@ String translateWindDirection(const String& chineseDirection);
 String formatWindSpeed(const String& windSpeed);
 
 // BM8563 RTC 函数声明
-void initBM8563();
 bool readTimeFromBM8563();
 bool writeTimeToBM8563(const DateTime& dt);
-uint8_t decToBcd(uint8_t val);
-uint8_t bcdToDec(uint8_t val);
 
 // 8像素对齐辅助函数 - SSD1680控制器要求x坐标必须8像素对齐
 int alignToPixel8(int x) {
@@ -113,9 +104,12 @@ void setup() {
   
   Serial.begin(115200);
   
-  // 初始化I2C和BM8563 RTC
-  Wire.begin(SDA_PIN, SCL_PIN);
-  initBM8563();
+  // 初始化BM8563 RTC
+  if (rtc.begin()) {
+    Serial.println("BM8563 RTC initialized successfully");
+  } else {
+    Serial.println("Failed to initialize BM8563 RTC");
+  }
   
   // 初始化WiFi连接
   WiFi.mode(WIFI_STA);
@@ -703,107 +697,70 @@ String formatWindSpeed(const String& windSpeed) {
   return formatted;
 }
 
-// BM8563 RTC 实现函数
-
-// 十进制转BCD
-uint8_t decToBcd(uint8_t val) {
-  return ((val / 10) << 4) + (val % 10);
-}
-
-// BCD转十进制
-uint8_t bcdToDec(uint8_t val) {
-  return ((val >> 4) * 10) + (val & 0x0F);
-}
-
-// 初始化BM8563
-void initBM8563() {
-  Serial.println("Initializing BM8563 RTC...");
-  
-  // 检查BM8563是否存在
-  Wire.beginTransmission(BM8563_I2C_ADDRESS);
-  if (Wire.endTransmission() == 0) {
-    Serial.println("BM8563 RTC found and initialized");
-  } else {
-    Serial.println("BM8563 RTC not found!");
-  }
-}
 
 // 从BM8563读取时间
 bool readTimeFromBM8563() {
-  Wire.beginTransmission(BM8563_I2C_ADDRESS);
-  Wire.write(BM8563_REG_SECONDS);
-  if (Wire.endTransmission() != 0) {
-    Serial.println("Failed to communicate with BM8563");
-    return false;
-  }
+  BM8563_Time rtcTime;
   
-  Wire.requestFrom(BM8563_I2C_ADDRESS, 7);
-  if (Wire.available() < 7) {
+  if (rtc.getTime(&rtcTime)) {
+    // 更新currentTime
+    currentTime.second = rtcTime.seconds;
+    currentTime.minute = rtcTime.minutes;
+    currentTime.hour = rtcTime.hours;
+    currentTime.day = rtcTime.days;
+    currentTime.month = rtcTime.months;
+    currentTime.year = rtcTime.years;
+    
+    Serial.print("Time read from BM8563: ");
+    Serial.print(2000 + currentTime.year);
+    Serial.print("/");
+    Serial.print(currentTime.month);
+    Serial.print("/");
+    Serial.print(currentTime.day);
+    Serial.print(" ");
+    Serial.print(currentTime.hour);
+    Serial.print(":");
+    Serial.print(currentTime.minute);
+    Serial.print(":");
+    Serial.println(currentTime.second);
+    
+    return true;
+  } else {
     Serial.println("Failed to read time from BM8563");
     return false;
   }
-  
-  uint8_t seconds = Wire.read() & 0x7F;  // 清除VL位
-  uint8_t minutes = Wire.read() & 0x7F;
-  uint8_t hours = Wire.read() & 0x3F;    // 清除世纪位
-  uint8_t days = Wire.read() & 0x3F;
-  uint8_t weekdays = Wire.read() & 0x07;
-  uint8_t months = Wire.read() & 0x1F;   // 清除世纪位
-  uint8_t years = Wire.read();
-  
-  // 转换BCD到十进制并更新currentTime
-  currentTime.second = bcdToDec(seconds);
-  currentTime.minute = bcdToDec(minutes);
-  currentTime.hour = bcdToDec(hours);
-  currentTime.day = bcdToDec(days);
-  currentTime.month = bcdToDec(months);
-  currentTime.year = bcdToDec(years);
-  
-  Serial.print("Time read from BM8563: ");
-  Serial.print(2000 + currentTime.year);
-  Serial.print("/");
-  Serial.print(currentTime.month);
-  Serial.print("/");
-  Serial.print(currentTime.day);
-  Serial.print(" ");
-  Serial.print(currentTime.hour);
-  Serial.print(":");
-  Serial.print(currentTime.minute);
-  Serial.print(":");
-  Serial.println(currentTime.second);
-  
-  return true;
 }
 
 // 写入时间到BM8563
 bool writeTimeToBM8563(const DateTime& dt) {
-  Wire.beginTransmission(BM8563_I2C_ADDRESS);
-  Wire.write(BM8563_REG_SECONDS);
-  Wire.write(decToBcd(dt.second));
-  Wire.write(decToBcd(dt.minute));
-  Wire.write(decToBcd(dt.hour));
-  Wire.write(decToBcd(dt.day));
-  Wire.write(0); // weekday (不使用)
-  Wire.write(decToBcd(dt.month));
-  Wire.write(decToBcd(dt.year));
+  BM8563_Time rtcTime;
   
-  if (Wire.endTransmission() != 0) {
+  // 转换DateTime到BM8563_Time
+  rtcTime.seconds = dt.second;
+  rtcTime.minutes = dt.minute;
+  rtcTime.hours = dt.hour;
+  rtcTime.days = dt.day;
+  rtcTime.weekdays = 0; // 不使用
+  rtcTime.months = dt.month;
+  rtcTime.years = dt.year;
+  
+  if (rtc.setTime(&rtcTime)) {
+    Serial.print("Time written to BM8563: ");
+    Serial.print(2000 + dt.year);
+    Serial.print("/");
+    Serial.print(dt.month);
+    Serial.print("/");
+    Serial.print(dt.day);
+    Serial.print(" ");
+    Serial.print(dt.hour);
+    Serial.print(":");
+    Serial.print(dt.minute);
+    Serial.print(":");
+    Serial.println(dt.second);
+    
+    return true;
+  } else {
     Serial.println("Failed to write time to BM8563");
     return false;
   }
-  
-  Serial.print("Time written to BM8563: ");
-  Serial.print(2000 + dt.year);
-  Serial.print("/");
-  Serial.print(dt.month);
-  Serial.print("/");
-  Serial.print(dt.day);
-  Serial.print(" ");
-  Serial.print(dt.hour);
-  Serial.print(":");
-  Serial.print(dt.minute);
-  Serial.print(":");
-  Serial.println(dt.second);
-  
-  return true;
 }
