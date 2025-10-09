@@ -43,9 +43,6 @@ unsigned long lastWiFiCheck = 0;
 const unsigned long wifiCheckInterval = 30000; // 30秒检查一次WiFi连接
 
 void updateTime();
-void processSerialInput();
-void setTimeFromTimestamp(unsigned long timestamp);
-DateTime timestampToDateTime(unsigned long timestamp);
 void connectToWiFi();
 void checkWiFiConnection();
 void updateNTPTime();
@@ -87,9 +84,6 @@ void setup() {
 }
 void loop() {
   unsigned long currentMillis = millis();
-  
-  // 处理串口输入
-  processSerialInput();
   
   // 检查WiFi连接状态
   checkWiFiConnection();
@@ -157,106 +151,6 @@ void updateTime() {
       }
     }
   }
-}
-
-// 处理串口输入
-void processSerialInput() {
-  static String inputString = "";
-  
-  while (Serial.available()) {
-    char inChar = (char)Serial.read();
-    
-    if (inChar == '\n') {
-      // 解析输入的时间戳
-      if (inputString.startsWith("T")) {
-        String timestampStr = inputString.substring(1);
-        timestampStr.trim();
-        
-        // 按UTC处理时间戳
-        unsigned long timestamp = timestampStr.toInt();
-        if (timestamp > 0) {
-          // UTC时间转换为本地时间（UTC+8）
-          unsigned long localTimestamp = timestamp + (8 * 3600);
-          setTimeFromTimestamp(localTimestamp);
-        }
-      }
-      inputString = "";
-    } else {
-      inputString += inChar;
-    }
-  }
-}
-
-// 从Unix时间戳设置时间
-// 从Unix时间戳设置时间
-void setTimeFromTimestamp(unsigned long timestamp) {
-  DateTime newTime = timestampToDateTime(timestamp);
-  currentTime = newTime;
-  lastMillis = millis();
-  
-  // 立即刷新显示并重置刷新计时器
-  unsigned long currentMillis = millis();
-  epd.showTimeDisplay(currentTime, currentWeather);
-  lastFullRefresh = currentMillis;
-  lastDisplayedMinute = currentTime.minute;
-}
-// 判断是否为闰年
-bool isLeapYear(int year) {
-  return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
-}
-
-// 获取指定月份的天数
-int daysInMonth(int month, int year) {
-  switch (month) {
-    case 2: return isLeapYear(year) ? 29 : 28;
-    case 4: case 6: case 9: case 11: return 30;
-    default: return 31;
-  }
-}
-
-// 将Unix时间戳转换为DateTime结构
-DateTime timestampToDateTime(unsigned long timestamp) {
-  DateTime dt;
-  
-  // 计算秒、分、时
-  dt.second = timestamp % 60;
-  timestamp /= 60;
-  dt.minute = timestamp % 60;
-  timestamp /= 60;
-  dt.hour = timestamp % 24;
-  timestamp /= 24;
-  
-  // 计算年、月、日（从1970年1月1日开始计算）
-  int days = timestamp;
-  dt.year = 1970;
-  dt.month = 1;
-  dt.day = 1;
-  
-  // 计算年份
-  while (days >= (isLeapYear(dt.year) ? 366 : 365)) {
-    int daysInYear = isLeapYear(dt.year) ? 366 : 365;
-    days -= daysInYear;
-    dt.year++;
-  }
-  
-  // 计算月份
-  while (days >= daysInMonth(dt.month, dt.year)) {
-    days -= daysInMonth(dt.month, dt.year);
-    dt.month++;
-    
-    if (dt.month > 12) {
-      dt.month = 1;
-      dt.year++;
-    }
-  }
-  
-  // 计算日期
-  dt.day += days;
-  
-  // 调整年份为两位数格式（与原代码兼容）
-  dt.year = dt.year % 100;
-  
-  return dt;
 }
 
 // 连接到WiFi网络
