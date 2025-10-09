@@ -5,8 +5,10 @@
 #include <time.h>
 #include <ArduinoJson.h>
 #include <Wire.h>
+#include <EEPROM.h>
 #include "../lib/BM8563/BM8563.h"
 #include "../lib/GDEY029T94/GDEY029T94.h"
+#include "../lib/WeatherStorage/WeatherStorage.h"
 #include "Weather_Symbols_Regular9pt7b.h"
 #include "DSEG7Modern_Bold28pt7b.h"
 
@@ -21,12 +23,14 @@
 #define EPD_BUSY  D1
 
 DateTime currentTime = {25, 9, 10, 20, 1, 34};
-WeatherInfo currentWeather = {23.5, 65, 'n', "北", "≤3", "晴"}; // 23.5°C, 65% humidity, sunny
+WeatherInfo currentWeather; // 将从EEPROM中读取
 unsigned long lastMillis = 0;
 unsigned long lastFullRefresh = 0;    // 上次全屏刷新时间
 int lastDisplayedMinute = -1;         // 上次显示的分钟数，用于检测分钟变化
-unsigned long lastWeatherUpdate = 0;  // 上次天气更新时间
 const unsigned long weatherUpdateInterval = 30 * 60 * 1000; // 30分钟更新一次天气
+
+// 创建天气存储对象
+WeatherStorage weatherStorage(512); // 512字节的EEPROM空间
 
 // 创建BM8563对象实例
 BM8563 rtc(SDA_PIN, SCL_PIN);
@@ -60,6 +64,21 @@ void setup() {
   lastDisplayedMinute = currentTime.minute;
   
   Serial.begin(115200);
+  
+  // 初始化天气存储
+  weatherStorage.begin();
+  
+  // 从EEPROM读取天气信息
+  if (!weatherStorage.readWeatherInfo(currentWeather)) {
+    Serial.println("Using default weather values");
+    // 设置默认天气值
+    currentWeather.Temperature = 23.5;
+    currentWeather.Humidity = 65;
+    currentWeather.Symbol = 'n';
+    currentWeather.WindDirection = "北";
+    currentWeather.WindSpeed = "≤3";
+    currentWeather.Weather = "晴";
+  }
   
   // 初始化GDEY029T94墨水屏
   epd.begin();
@@ -98,8 +117,8 @@ void loop() {
     lastFullRefresh = currentMillis;
   }
   
-  // 每30分钟更新一次天气信息
-  if (currentMillis - lastWeatherUpdate >= weatherUpdateInterval) {
+  // 检查是否需要更新天气信息
+  if (weatherStorage.shouldUpdateWeather(weatherUpdateInterval)) {
     // 每30分钟更新天气时，同时同步NTP时间到BM8563
     updateNTPTime();
     updateWeatherInfo();
@@ -324,7 +343,7 @@ bool fetchWeatherData() {
     Serial.println("Weather data received: " + payload);
     
     // 解析JSON数据
-    DynamicJsonDocument doc(4096); // 根据实际需要调整大小
+    JsonDocument doc; // 根据实际需要调整大小
     DeserializationError error = deserializeJson(doc, payload);
     
     if (error) {
@@ -372,15 +391,19 @@ bool fetchWeatherData() {
 }
 
 // 更新天气信息
-// 更新天气信息
 void updateWeatherInfo() {
   Serial.println("Updating weather information...");
   
   if (fetchWeatherData()) {
-    // 天气更新成功，刷新显示
+    // 天气更新成功，保存到EEPROM
+    if (weatherStorage.writeWeatherInfo(currentWeather)) {
+      Serial.println("Weather data saved to EEPROM successfully");
+    } else {
+      Serial.println("Failed to save weather data to EEPROM");
+    }
+    // 刷新显示
     epd.showTimeDisplay(currentTime, currentWeather);
   }
-  lastWeatherUpdate = millis();
 }
 // 将天气状况映射到符号
 char mapWeatherToSymbol(const String& weather) {
