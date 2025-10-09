@@ -3,40 +3,22 @@
 #include <ESP8266HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <time.h>
-#include <GxEPD2_BW.h>
-#include <GxEPD2_3C.h>
-#include <Fonts/FreeMonoBold9pt7b.h>
-#include "Weather_Symbols_Regular9pt7b.h"
-#include "DSEG7Modern_Bold28pt7b.h"
 #include <ArduinoJson.h>
 #include <Wire.h>
 #include "../lib/BM8563/BM8563.h"
+#include "../lib/GDEY029T94/GDEY029T94.h"
+#include "Weather_Symbols_Regular9pt7b.h"
+#include "DSEG7Modern_Bold28pt7b.h"
 
 // I2C引脚定义 (根据用户提供的连接)
 #define SDA_PIN 2  // GPIO-2 (D4)
 #define SCL_PIN 12 // GPIO-12 (D6)
 
-// GDEY029T94 2.9寸黑白墨水屏 128x296 (使用SSD1680控制器)
-struct DateTime {
-  int year;
-  int month;
-  int day;
-  int hour;
-  int minute;
-  int second;
-};
-
-// Weather information structure
-struct WeatherInfo {
-  float Temperature;    // Temperature in Celsius
-  int Humidity;         // Humidity percentage
-  char Symbol;          // Weather symbol character
-  String WindDirection; // 风向
-  String WindSpeed;     // 风速
-  String Weather;       // 天气状况
-  // Weather symbol mapping:
-  // n=晴(sunny), d=雪(snow), m=雨(rain), l=雾(fog), c=阴(overcast), o=多云(cloudy), k=雷雨(thunderstorm)
-};
+// GDEY029T94 墨水屏引脚定义
+#define EPD_CS    D8
+#define EPD_DC    D2
+#define EPD_RST   D0
+#define EPD_BUSY  D1
 
 DateTime currentTime = {25, 9, 10, 20, 1, 34};
 WeatherInfo currentWeather = {23.5, 65, 'n', "北", "≤3", "晴"}; // 23.5°C, 65% humidity, sunny
@@ -45,10 +27,12 @@ unsigned long lastFullRefresh = 0;    // 上次全屏刷新时间
 int lastDisplayedMinute = -1;         // 上次显示的分钟数，用于检测分钟变化
 unsigned long lastWeatherUpdate = 0;  // 上次天气更新时间
 const unsigned long weatherUpdateInterval = 30 * 60 * 1000; // 30分钟更新一次天气
-const GFXfont* timeFont = &DSEG7Modern_Bold28pt7b;  // 时间显示字体
 
 // 创建BM8563对象实例
 BM8563 rtc(SDA_PIN, SCL_PIN);
+
+// 创建GDEY029T94对象实例
+GDEY029T94 epd(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
 
 // WiFi配置
 const char* targetSSID = "Sina Plaza Office";
@@ -58,20 +42,7 @@ bool wifiConnected = false;
 unsigned long lastWiFiCheck = 0;
 const unsigned long wifiCheckInterval = 30000; // 30秒检查一次WiFi连接
 
-#define EPD_CS    D8
-#define EPD_DC    D2
-#define EPD_RST   D0
-#define EPD_BUSY  D1
-// 原始定义可能存在width/height混淆，尝试使用WIDTH而不是HEIGHT
-GxEPD2_BW<GxEPD2_290_GDEY029T94, GxEPD2_290_GDEY029T94::WIDTH> display(GxEPD2_290_GDEY029T94(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
-
-void showTimeDisplay();
 void updateTime();
-String getFormattedTime();
-String getFormattedDate();
-String getWeatherInfo();
-char getWeatherSymbol();
-String getDayOfWeek(int year, int month, int day);
 void processSerialInput();
 void setTimeFromTimestamp(unsigned long timestamp);
 DateTime timestampToDateTime(unsigned long timestamp);
@@ -81,28 +52,23 @@ void updateNTPTime();
 void updateWeatherInfo();
 bool fetchWeatherData();
 char mapWeatherToSymbol(const String& weather);
-String translateWindDirection(const String& chineseDirection);
-String formatWindSpeed(const String& windSpeed);
 
 // BM8563 RTC 函数声明
 bool readTimeFromBM8563();
 bool writeTimeToBM8563(const DateTime& dt);
-
-// 8像素对齐辅助函数 - SSD1680控制器要求x坐标必须8像素对齐
-int alignToPixel8(int x) {
-  return (x / 8) * 8;
-}
 
 void setup() {
   lastMillis = millis();
   lastFullRefresh = millis();
   lastDisplayedMinute = currentTime.minute;
   
-  // 在初始化显示之前设置旋转，确保第一次显示正确旋转
-  display.setRotation(1); // 调整旋转以适应128x296分辨率
-  display.init();
-  
   Serial.begin(115200);
+  
+  // 初始化GDEY029T94墨水屏
+  epd.begin();
+  epd.setRotation(1); // 调整旋转以适应128x296分辨率
+  epd.setTimeFont(&DSEG7Modern_Bold28pt7b);
+  epd.setWeatherSymbolFont(&Weather_Symbols_Regular9pt7b);
   
   // 初始化BM8563 RTC
   if (rtc.begin()) {
@@ -116,7 +82,8 @@ void setup() {
   WiFi.begin();
   connectToWiFi();
   
-  showTimeDisplay();
+  // 显示初始时间
+  epd.showTimeDisplay(currentTime, currentWeather);
 }
 void loop() {
   unsigned long currentMillis = millis();
@@ -126,19 +93,19 @@ void loop() {
   
   // 检查WiFi连接状态
   checkWiFiConnection();
+  
   // 每分钟刷新一次
   if (currentTime.second == 0 && currentTime.minute != lastDisplayedMinute) {
     ESP.wdtFeed();
     // 刷新屏幕前从BM8563读取时间
     readTimeFromBM8563();
-    showTimeDisplay();
+    epd.showTimeDisplay(currentTime, currentWeather);
     lastDisplayedMinute = currentTime.minute;
     lastFullRefresh = currentMillis;
   }
   
   // 每30分钟更新一次天气信息
   if (currentMillis - lastWeatherUpdate >= weatherUpdateInterval) {
-
     // 每30分钟更新天气时，同时同步NTP时间到BM8563
     updateNTPTime();
     updateWeatherInfo();
@@ -149,73 +116,6 @@ void loop() {
   delay(1000);
 }
 
-void showTimeDisplay() {
-  String timeStr = getFormattedTime();
-  String dateStr = getFormattedDate();
-  String weatherStr = getWeatherInfo();
-  
-  display.setFullWindow();
-  display.firstPage();
-  do {
-    display.fillScreen(GxEPD_WHITE);
-    display.setTextColor(GxEPD_BLACK);
-    
-    // Display weather info (using small font, left aligned)
-    display.setFont(&FreeMonoBold9pt7b);
-    int weatherX = alignToPixel8(10); // Left aligned, 8-pixel aligned from left edge
-    int weatherY = 15; // Top position
-    
-    display.setCursor(weatherX, weatherY);
-    display.print(weatherStr);
-    
-    // Display weather symbol (right aligned)
-    display.setFont(&Weather_Symbols_Regular9pt7b);
-    char symbolStr[2] = {getWeatherSymbol(), '\0'};
-    int16_t sbx, sby;
-    uint16_t sbw, sbh;
-    display.getTextBounds(symbolStr, 0, 0, &sbx, &sby, &sbw, &sbh);
-    
-    int symbolX = alignToPixel8(display.width() - sbw - 10); // Right aligned, 8-pixel aligned
-    int symbolY = weatherY; // Same Y position as weather info
-    
-    display.setCursor(symbolX, symbolY);
-    display.print(symbolStr);
-    
-    // Draw line below weather info
-    int topLineY = weatherY + 5;
-    display.drawLine(alignToPixel8(10), topLineY, display.width() - alignToPixel8(10), topLineY, GxEPD_BLACK);
-    
-    // Display time (using large font, centered with fixed position)
-    display.setFont(timeFont);
-    
-    // 使用固定的时间字符串"00:00"来计算居中位置，确保位置不变
-    String fixedTimeStr = "00:00";
-    int16_t tbx, tby;
-    uint16_t tbw, tbh;
-    display.getTextBounds(fixedTimeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
-    
-    int timeX = alignToPixel8((display.width() - tbw) / 2); // Center aligned, 8-pixel aligned
-    int timeY = topLineY + tbh + 10; // Below the top line (减少间距)
-    
-    display.setCursor(timeX, timeY);
-    display.print(timeStr);
-    
-    // Draw line below time
-    int bottomLineY = timeY + 10;
-    display.drawLine(alignToPixel8(10), bottomLineY, display.width() - alignToPixel8(10), bottomLineY, GxEPD_BLACK);
-    
-    // Display date (using small font, left aligned)
-    display.setFont(&FreeMonoBold9pt7b);
-    int dateX = alignToPixel8(10); // Left aligned, 8-pixel aligned from left edge
-    int dateY = bottomLineY + 20; // 20 pixels below the line (减少间距)
-    
-    display.setCursor(dateX, dateY);
-    display.print(dateStr);
-    
-  } while (display.nextPage());
-  
-  display.hibernate();
-}
 
 void updateTime() {
   unsigned long currentMillis = millis();
@@ -259,59 +159,6 @@ void updateTime() {
   }
 }
 
-String getFormattedTime() {
-  char timeString[6];
-  sprintf(timeString, "%02d:%02d", currentTime.hour, currentTime.minute);
-  
-  return String(timeString);
-}
-
-String getFormattedDate() {
-  // 获取完整年份（2000 + 两位数年份）
-  int fullYear = 2000 + currentTime.year;
-  
-  // 获取星期几
-  String dayOfWeek = getDayOfWeek(fullYear, currentTime.month, currentTime.day);
-  
-  char dateString[50];
-  sprintf(dateString, "%04d/%02d/%02d %s", fullYear, currentTime.month, currentTime.day, dayOfWeek.c_str());
-  
-  return String(dateString);
-}
-
-String getDayOfWeek(int year, int month, int day) {
-  // 使用Zeller公式计算星期几
-  if (month < 3) {
-    month += 12;
-    year--;
-  }
-  
-  int k = year % 100;
-  int j = year / 100;
-  
-  int h = (day + ((13 * (month + 1)) / 5) + k + (k / 4) + (j / 4) - 2 * j) % 7;
-  
-  // 转换为星期几字符串（0=周六，1=周日，2=周一...）
-  String days[] = {"Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"};
-  return days[h];
-}
-String getWeatherInfo() {
-  // Format weather information for display
-  String weatherString = "";
-  
-  // 按照新格式显示天气信息: 22C 46% NortheEast ≤3
-  weatherString += String(currentWeather.Temperature, 0) + "C ";
-  weatherString += String(currentWeather.Humidity) + "% ";
-  weatherString += translateWindDirection(currentWeather.WindDirection) + " ";
-  weatherString += currentWeather.WindSpeed;
-  
-  return weatherString;
-}
-
-char getWeatherSymbol() {
-  // Return weather symbol character
-  return currentWeather.Symbol;
-}
 // 处理串口输入
 void processSerialInput() {
   static String inputString = "";
@@ -341,6 +188,7 @@ void processSerialInput() {
 }
 
 // 从Unix时间戳设置时间
+// 从Unix时间戳设置时间
 void setTimeFromTimestamp(unsigned long timestamp) {
   DateTime newTime = timestampToDateTime(timestamp);
   currentTime = newTime;
@@ -348,11 +196,10 @@ void setTimeFromTimestamp(unsigned long timestamp) {
   
   // 立即刷新显示并重置刷新计时器
   unsigned long currentMillis = millis();
-  showTimeDisplay();
+  epd.showTimeDisplay(currentTime, currentWeather);
   lastFullRefresh = currentMillis;
   lastDisplayedMinute = currentTime.minute;
 }
-
 // 判断是否为闰年
 bool isLeapYear(int year) {
   return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
@@ -607,7 +454,7 @@ bool fetchWeatherData() {
     currentWeather.Temperature = lives["temperature"].as<float>();
     currentWeather.Humidity = lives["humidity"].as<int>();
     currentWeather.WindDirection = lives["winddirection"].as<String>();
-    currentWeather.WindSpeed = formatWindSpeed(lives["windpower"].as<String>());
+    currentWeather.WindSpeed = lives["windpower"].as<String>();
     currentWeather.Weather = lives["weather"].as<String>();
     
     // 根据天气状况设置符号
@@ -631,16 +478,16 @@ bool fetchWeatherData() {
 }
 
 // 更新天气信息
+// 更新天气信息
 void updateWeatherInfo() {
   Serial.println("Updating weather information...");
   
   if (fetchWeatherData()) {
     // 天气更新成功，刷新显示
-    showTimeDisplay();
+    epd.showTimeDisplay(currentTime, currentWeather);
   }
   lastWeatherUpdate = millis();
 }
-
 // 将天气状况映射到符号
 char mapWeatherToSymbol(const String& weather) {
   // Weather symbol mapping:
@@ -675,26 +522,6 @@ char mapWeatherToSymbol(const String& weather) {
   } else {
     return 'n'; // 默认晴天 abcdefghijklmnop
   }
-}
-// 将中文风向转换为英文
-String translateWindDirection(const String& chineseDirection) {
-  if (chineseDirection == "东") return "East";
-  if (chineseDirection == "西") return "West";
-  if (chineseDirection == "南") return "South";
-  if (chineseDirection == "北") return "North";
-  if (chineseDirection == "东北") return "Northeast";
-  if (chineseDirection == "西北") return "Northwest";
-  if (chineseDirection == "东南") return "Southeast";
-  if (chineseDirection == "西南") return "Southwest";
-  return chineseDirection; // 如果没有匹配的，返回原始值
-}
-
-// 格式化风速字符串，将≤替换成<=，≥替换成>=
-String formatWindSpeed(const String& windSpeed) {
-  String formatted = windSpeed;
-  formatted.replace("≤", "<=");
-  formatted.replace("≥", ">=");
-  return formatted;
 }
 
 
