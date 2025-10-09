@@ -1,5 +1,11 @@
 #include "WeatherStorage.h"
 #include "../GDEY029T94/GDEY029T94.h"
+#include "../BM8563/BM8563.h"
+#include <time.h>
+
+// I2C引脚定义 (与main.cpp中保持一致)
+#define SDA_PIN 2  // GPIO-2 (D4)
+#define SCL_PIN 12 // GPIO-12 (D6)
 
 WeatherStorage::WeatherStorage(int eepromSize) : _eepromSize(eepromSize), _eepromAddress(0) {
 }
@@ -67,8 +73,34 @@ bool WeatherStorage::writeWeatherInfo(const WeatherInfo& weatherInfo) {
   // 转换数据格式
   convertToStorageData(weatherInfo, storageData);
   
-  // 设置当前时间为更新时间
-  storageData.lastUpdateTime = millis();
+  // 设置当前时间为更新时间（使用RTC时间转换为Unix时间戳）
+  time_t now = 0;
+  
+  // 从RTC获取时间
+  BM8563 rtc(SDA_PIN, SCL_PIN);  // 需要与main.cpp中相同的引脚定义
+  BM8563_Time rtcTime;
+  if (rtc.getTime(&rtcTime)) {
+    // 将RTC时间转换为Unix时间戳
+    struct tm timeinfo = {0};
+    timeinfo.tm_year = 2000 + rtcTime.years - 1900;  // 转换为从1900开始的年份
+    timeinfo.tm_mon = rtcTime.months - 1;               // 月份是0-11
+    timeinfo.tm_mday = rtcTime.days;
+    timeinfo.tm_hour = rtcTime.hours;
+    timeinfo.tm_min = rtcTime.minutes;
+    timeinfo.tm_sec = rtcTime.seconds;
+    
+    // 转换为Unix时间戳（UTC时间）
+    now = mktime(&timeinfo);
+    
+    if (now == (time_t)-1) {
+      Serial.println("Failed to convert RTC time to Unix timestamp");
+      now = 0;
+    }
+  } else {
+    Serial.println("Failed to read time from RTC");
+  }
+  
+  storageData.lastUpdateTime = now;
   
   // 写入数据到EEPROM
   EEPROM.put(_eepromAddress, storageData);
@@ -105,14 +137,38 @@ bool WeatherStorage::shouldUpdateWeather(unsigned long intervalMs) {
     return true;
   }
   
-  // 检查是否超过了更新间隔
-  unsigned long currentTime = millis();
-  // 处理millis()溢出的情况
-  if (currentTime < lastUpdateTime) {
-    return true;
+  // 使用RTC时间获取当前时间戳
+  time_t currentTime = 0;
+  
+  // 从RTC获取时间
+  BM8563 rtc(SDA_PIN, SCL_PIN);
+  BM8563_Time rtcTime;
+  if (rtc.getTime(&rtcTime)) {
+    // 将RTC时间转换为Unix时间戳（UTC时间）
+    struct tm timeinfo = {0};
+    timeinfo.tm_year = 2000 + rtcTime.years - 1900;  // 转换为从1900开始的年份
+    timeinfo.tm_mon = rtcTime.months - 1;               // 月份是0-11
+    timeinfo.tm_mday = rtcTime.days;
+    timeinfo.tm_hour = rtcTime.hours;
+    timeinfo.tm_min = rtcTime.minutes;
+    timeinfo.tm_sec = rtcTime.seconds;
+    
+    // 转换为Unix时间戳（UTC时间）
+    currentTime = mktime(&timeinfo);
+    
+    if (currentTime == (time_t)-1) {
+      Serial.println("Failed to convert RTC time to Unix timestamp");
+      currentTime = 0;
+    }
+  } else {
+    Serial.println("Failed to read time from RTC");
+    return true; // 如果无法读取RTC时间，则更新
   }
   
-  return (currentTime - lastUpdateTime) >= intervalMs;
+  // 检查是否超过了更新间隔（将毫秒转换为秒）
+  unsigned long intervalSeconds = intervalMs / 1000;
+  
+  return (currentTime - lastUpdateTime) >= intervalSeconds;
 }
 
 unsigned long WeatherStorage::getLastUpdateTime() {
@@ -131,6 +187,45 @@ unsigned long WeatherStorage::getLastUpdateTime() {
   }
   
   return storageData.lastUpdateTime;
+}
+
+bool WeatherStorage::setUpdateTime(unsigned long timestamp) {
+  // 读取现有的数据
+  WeatherStorageData storageData;
+  EEPROM.get(_eepromAddress, storageData);
+  
+  // 计算校验和
+  byte storedChecksum = EEPROM.read(_eepromAddress + sizeof(WeatherStorageData));
+  byte calculatedChecksum = calculateChecksum(storageData);
+  
+  // 检查校验和
+  if (storedChecksum != calculatedChecksum) {
+    Serial.println("Weather data checksum mismatch, cannot update timestamp");
+    return false;
+  }
+  
+  // 更新时间戳
+  storageData.lastUpdateTime = timestamp;
+  
+  // 写入数据到EEPROM
+  EEPROM.put(_eepromAddress, storageData);
+  
+  // 计算并写入校验和
+  byte checksum = calculateChecksum(storageData);
+  EEPROM.write(_eepromAddress + sizeof(WeatherStorageData), checksum);
+  
+  // 提交更改
+  bool success = EEPROM.commit();
+  
+  if (success) {
+    Serial.println("Timestamp updated successfully");
+    Serial.print("New timestamp: ");
+    Serial.println(timestamp);
+  } else {
+    Serial.println("Failed to update timestamp");
+  }
+  
+  return success;
 }
 
 void WeatherStorage::clearWeatherData() {

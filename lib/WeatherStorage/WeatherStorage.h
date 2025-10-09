@@ -38,6 +38,9 @@ public:
   // 获取上次更新时间
   unsigned long getLastUpdateTime();
   
+  // 设置上次更新时间戳（使用RTC时间）
+  bool setUpdateTime(unsigned long timestamp);
+  
   // 清除EEPROM中的天气数据
   void clearWeatherData();
   

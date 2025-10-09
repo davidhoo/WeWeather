@@ -6,11 +6,17 @@
 #include <ArduinoJson.h>
 #include <Wire.h>
 #include <EEPROM.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266mDNS.h>
 #include "../lib/BM8563/BM8563.h"
 #include "../lib/GDEY029T94/GDEY029T94.h"
 #include "../lib/WeatherStorage/WeatherStorage.h"
 #include "Weather_Symbols_Regular9pt7b.h"
 #include "DSEG7Modern_Bold28pt7b.h"
+
+// 深度睡眠相关定义
+#define DEEP_SLEEP_DURATION 60  // 1分钟深度睡眠（单位：秒）
+#define WAKEUP_REASON_RTC 0  // RTC唤醒原因
 
 // I2C引脚定义 (根据用户提供的连接)
 #define SDA_PIN 2  // GPIO-2 (D4)
@@ -22,7 +28,7 @@
 #define EPD_RST   D0
 #define EPD_BUSY  D1
 
-DateTime currentTime = {25, 9, 10, 20, 1, 34};
+DateTime currentTime = {0, 0, 0, 0, 0, 0};
 WeatherInfo currentWeather; // 将从EEPROM中读取
 unsigned long lastMillis = 0;
 unsigned long lastFullRefresh = 0;    // 上次全屏刷新时间
@@ -58,12 +64,19 @@ char mapWeatherToSymbol(const String& weather);
 bool readTimeFromBM8563();
 bool writeTimeToBM8563(const DateTime& dt);
 
+// 深度睡眠相关函数声明
+void setupDeepSleep();
+void enterDeepSleep();
+bool shouldUpdateWeatherFromNetwork();
+
 void setup() {
   lastMillis = millis();
   lastFullRefresh = millis();
   lastDisplayedMinute = currentTime.minute;
   
   Serial.begin(115200);
+  delay(1000); // 等待串口初始化完成
+  Serial.println("System starting up...");
   
   // 初始化天气存储
   weatherStorage.begin();
@@ -93,42 +106,50 @@ void setup() {
     Serial.println("Failed to initialize BM8563 RTC");
   }
   
-  // 初始化WiFi连接
-  WiFi.mode(WIFI_STA);
-  WiFi.begin();
-  connectToWiFi();
+  // 从RTC读取时间
+  readTimeFromBM8563();
   
-  // 显示初始时间
+  // 判断是否需要从网络更新天气
+  if (shouldUpdateWeatherFromNetwork()) {
+    Serial.println("Weather data is outdated, updating from network...");
+    
+    // 初始化WiFi连接
+    WiFi.mode(WIFI_STA);
+    WiFi.begin();
+    connectToWiFi();
+    
+    // 如果WiFi连接成功，更新NTP时间和天气信息
+    if (wifiConnected) {
+      updateNTPTime();
+      updateWeatherInfo();
+    } else {
+      Serial.println("WiFi connection failed, using cached data");
+    }
+  } else {
+    Serial.println("Weather data is recent, using cached data");
+  }
+  
+  // 显示时间和天气信息
   epd.showTimeDisplay(currentTime, currentWeather);
-}
-void loop() {
-  unsigned long currentMillis = millis();
   
-  // 检查WiFi连接状态
-  checkWiFiConnection();
-  
-  // 每分钟刷新一次
-  if (currentTime.second == 0 && currentTime.minute != lastDisplayedMinute) {
-    ESP.wdtFeed();
-    // 刷新屏幕前从BM8563读取时间
-    readTimeFromBM8563();
-    epd.showTimeDisplay(currentTime, currentWeather);
-    lastDisplayedMinute = currentTime.minute;
-    lastFullRefresh = currentMillis;
-  }
-  
-  // 检查是否需要更新天气信息
-  if (weatherStorage.shouldUpdateWeather(weatherUpdateInterval)) {
-    // 每30分钟更新天气时，同时同步NTP时间到BM8563
-    updateNTPTime();
-    updateWeatherInfo();
-  }
-  
-  updateTime();
-  ESP.wdtFeed();
-  delay(1000);
+  // 设置深度睡眠
+  setupDeepSleep();
 }
 
+void loop() {
+  // 从RTC读取最新时间
+  readTimeFromBM8563();
+  
+  // 显示时间和天气信息
+  epd.showTimeDisplay(currentTime, currentWeather);
+  
+  Serial.println("Task completed, entering deep sleep...");
+  Serial.flush(); // 确保所有串口数据都已发送
+  delay(1000); // 等待1秒确保信息显示完成
+  
+  // 进入深度睡眠
+  enterDeepSleep();
+}
 
 void updateTime() {
   unsigned long currentMillis = millis();
@@ -223,11 +244,7 @@ void connectToWiFi() {
         Serial.println(WiFi.localIP());
         wifiConnected = true;
         
-        // WiFi连接成功后更新NTP时间
-        updateNTPTime();
-        
-        // WiFi连接成功后更新天气信息
-        updateWeatherInfo();
+        // 注意：不要在这里更新NTP时间和天气信息，因为setup函数中已经根据时间间隔判断是否需要更新
       } else {
         Serial.println("");
         Serial.println("Failed to connect to WiFi");
@@ -292,7 +309,6 @@ void updateNTPTime() {
   time_t now = time(nullptr);
   struct tm* timeinfo = localtime(&now);
   
-  // 更新系统时间
   // 更新系统时间
   currentTime.year = (timeinfo->tm_year + 1900) % 100;  // 转换为两位数年份
   currentTime.month = timeinfo->tm_mon + 1;            // tm_mon是从0开始的
@@ -395,6 +411,60 @@ void updateWeatherInfo() {
   Serial.println("Updating weather information...");
   
   if (fetchWeatherData()) {
+    // 尝试从系统获取当前Unix时间戳（如果有WiFi连接）
+    time_t now = time(nullptr);
+    
+    // 如果系统时间不可用，从RTC获取时间并转换为Unix时间戳
+    if (now == 0 || now == 1) {  // 添加对now==1的检查
+      Serial.println("System time not available, using RTC time");
+      
+      // 从RTC获取时间
+      BM8563_Time rtcTime;
+      if (rtc.getTime(&rtcTime)) {
+        // 将RTC时间转换为Unix时间戳
+        struct tm timeinfo = {0};
+        timeinfo.tm_year = 2000 + rtcTime.years - 1900;  // 转换为从1900开始的年份
+        timeinfo.tm_mon = rtcTime.months - 1;               // 月份是0-11
+        timeinfo.tm_mday = rtcTime.days;
+        timeinfo.tm_hour = rtcTime.hours;
+        timeinfo.tm_min = rtcTime.minutes;
+        timeinfo.tm_sec = rtcTime.seconds;
+        
+        // 设置时区为UTC+8
+        timeinfo.tm_isdst = -1;  // 让系统决定是否使用夏令时
+        
+        // 转换为Unix时间戳（UTC时间）
+        now = mktime(&timeinfo);
+        
+        // 由于RTC时间是UTC+8时区，需要减去8小时的秒数，转换为UTC时间戳
+        if (now != (time_t)-1) {
+          now -= 8 * 3600;
+        }
+        
+        if (now == (time_t)-1) {
+          Serial.println("Failed to convert RTC time to Unix timestamp");
+        } else {
+          Serial.print("RTC time converted to Unix timestamp: ");
+          Serial.println(now);
+        }
+      } else {
+        Serial.println("Failed to read time from RTC");
+      }
+    }
+    
+    // 如果成功获取到时间戳，保存到EEPROM
+    if (now != 0 && now != 1 && now != (time_t)-1) {  // 添加对now==1的检查
+      // 使用Unix时间戳设置更新时间
+      if (weatherStorage.setUpdateTime(now)) {
+        Serial.print("Weather data updated with Unix timestamp: ");
+        Serial.println(now);
+      } else {
+        Serial.println("Failed to update timestamp");
+      }
+    } else {
+      Serial.println("Failed to get valid timestamp");
+    }
+    
     // 天气更新成功，保存到EEPROM
     if (weatherStorage.writeWeatherInfo(currentWeather)) {
       Serial.println("Weather data saved to EEPROM successfully");
@@ -405,6 +475,7 @@ void updateWeatherInfo() {
     epd.showTimeDisplay(currentTime, currentWeather);
   }
 }
+
 // 将天气状况映射到符号
 char mapWeatherToSymbol(const String& weather) {
   // Weather symbol mapping:
@@ -440,7 +511,6 @@ char mapWeatherToSymbol(const String& weather) {
     return 'n'; // 默认晴天 abcdefghijklmnop
   }
 }
-
 
 // 从BM8563读取时间
 bool readTimeFromBM8563() {
@@ -507,4 +577,114 @@ bool writeTimeToBM8563(const DateTime& dt) {
     Serial.println("Failed to write time to BM8563");
     return false;
   }
+}
+
+// 设置深度睡眠
+void setupDeepSleep() {
+  Serial.println("Setting up deep sleep...");
+  
+  // 清除之前的定时器标志
+  rtc.clearTimerFlag();
+  
+  // 设置RTC定时器，1分钟唤醒一次
+  // 使用1Hz频率，60秒定时
+  rtc.setTimer(60, BM8563_TIMER_1HZ);
+  
+  // 启用定时器中断
+  rtc.enableTimerInterrupt(true);
+  
+  // 配置RTC的INT引脚连接到ESP8266的RST引脚用于唤醒
+  // 当RTC定时器触发时，INT引脚会产生低电平脉冲，复位ESP8266
+  Serial.println("Deep sleep setup complete");
+}
+
+// 进入深度睡眠
+void enterDeepSleep() {
+  Serial.println("Entering deep sleep...");
+  Serial.flush();
+  
+  // 等待串口输出完成
+  delay(100);
+  
+  // 配置ESP8266深度睡眠模式
+  // 由于BM8563的INT引脚连接到ESP8266的RST引脚，我们使用ESP.deepSleep(0)
+  // 当RTC定时器触发时，INT引脚会产生低电平脉冲，复位ESP8266，实现唤醒
+  ESP.deepSleep(0); // 0表示无限期睡眠，直到外部复位
+  
+  // 这行代码不会执行，因为ESP8266已经进入深度睡眠
+  Serial.println("This line should not be printed");
+}
+
+// 判断是否需要从网络更新天气
+bool shouldUpdateWeatherFromNetwork() {
+  unsigned long lastUpdateTime = weatherStorage.getLastUpdateTime();
+  
+  // 如果从未更新过，应该更新
+  if (lastUpdateTime == 0) {
+    Serial.println("No previous weather data, need to update from network");
+    return true;
+  }
+  
+  // 尝试从系统获取当前Unix时间戳（如果有WiFi连接）
+  time_t now = time(nullptr);
+  
+  // 如果系统时间不可用，从RTC获取时间并转换为Unix时间戳
+  if (now == 0 || now == 1) {  // 添加对now==1的检查
+    Serial.println("System time not available, using RTC time");
+    
+    // 从RTC获取时间
+    BM8563_Time rtcTime;
+    if (!rtc.getTime(&rtcTime)) {
+      Serial.println("Failed to read time from RTC, need to update from network");
+      return true;
+    }
+    
+    // 将RTC时间转换为Unix时间戳
+    // 注意：这是一个简化的转换，假设RTC时间是准确的
+    struct tm timeinfo = {0};
+    timeinfo.tm_year = 2000 + rtcTime.years - 1900;  // 转换为从1900开始的年份
+    timeinfo.tm_mon = rtcTime.months - 1;               // 月份是0-11
+    timeinfo.tm_mday = rtcTime.days;
+    timeinfo.tm_hour = rtcTime.hours;
+    timeinfo.tm_min = rtcTime.minutes;
+    timeinfo.tm_sec = rtcTime.seconds;
+    
+    // 设置时区为UTC+8
+    timeinfo.tm_isdst = -1;  // 让系统决定是否使用夏令时
+    
+    // 转换为Unix时间戳（UTC时间）
+    now = mktime(&timeinfo);
+    
+    // 由于RTC时间是UTC+8时区，需要减去8小时的秒数，转换为UTC时间戳
+    if (now != (time_t)-1) {
+      now -= 8 * 3600;
+    }
+    
+    if (now == (time_t)-1) {
+      Serial.println("Failed to convert RTC time to Unix timestamp, need to update from network");
+      return true;
+    }
+    
+    Serial.print("RTC time converted to Unix timestamp: ");
+    Serial.println(now);
+  }
+  
+  // 计算时间差（秒）
+  unsigned long timeDiffSeconds = now - lastUpdateTime;
+  
+  // 检查是否超过了30分钟更新间隔（30 * 60 = 1800秒）
+  bool shouldUpdate = timeDiffSeconds >= 1800;
+  
+  Serial.print("Current Unix time: ");
+  Serial.print(now);
+  Serial.print(", Last update: ");
+  Serial.print(lastUpdateTime);
+  Serial.print(", Diff: ");
+  Serial.print(timeDiffSeconds);
+  Serial.print(" seconds (");
+  Serial.print(timeDiffSeconds / 60);
+  Serial.print(" minutes), ");
+  Serial.println(shouldUpdate ? "need to update from network" : "using cached data");
+  
+  return shouldUpdate;
 }
