@@ -16,7 +16,7 @@ bool BM8563::begin() {
     
     // 初始化控制寄存器
     uint8_t ctrl1 = 0x00;  // 普通模式，时钟运行
-    uint8_t ctrl2 = 0x00;  // 禁用中断
+    uint8_t ctrl2 = BM8563_TI_TP;  // 设置TI/TP=1，使用脉冲模式
     
     writeRegister(BM8563_CTRL_STATUS1, ctrl1);
     writeRegister(BM8563_CTRL_STATUS2, ctrl2);

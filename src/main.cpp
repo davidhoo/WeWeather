@@ -46,7 +46,6 @@ GDEY029T94 epd(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
 
 // WiFi配置
 const char* targetSSID = "Sina Plaza Office";
-const char* wifiUsername = "hubo3";
 const char* wifiPassword = "urtheone";
 bool wifiConnected = false;
 unsigned long lastWiFiCheck = 0;
@@ -70,12 +69,13 @@ void enterDeepSleep();
 bool shouldUpdateWeatherFromNetwork();
 
 void setup() {
+  delay(50);
   lastMillis = millis();
   lastFullRefresh = millis();
   lastDisplayedMinute = currentTime.minute;
   
-  Serial.begin(115200);
-  delay(1000); // 等待串口初始化完成
+  Serial.begin(74880);
+  
   Serial.println("System starting up...");
   
   // 初始化天气存储
@@ -102,6 +102,16 @@ void setup() {
   // 初始化BM8563 RTC
   if (rtc.begin()) {
     Serial.println("BM8563 RTC initialized successfully");
+    
+    // 清除RTC中断标志
+    rtc.clearTimerFlag();
+    rtc.clearAlarmFlag();
+    Serial.println("RTC interrupt flags cleared");
+    
+    // 确保中断被禁用，防止INT持续拉低
+    rtc.enableTimerInterrupt(false);
+    rtc.enableAlarmInterrupt(false);
+    Serial.println("RTC interrupts disabled");
   } else {
     Serial.println("Failed to initialize BM8563 RTC");
   }
@@ -134,21 +144,22 @@ void setup() {
   
   // 设置深度睡眠
   setupDeepSleep();
+  enterDeepSleep();
 }
 
 void loop() {
-  // 从RTC读取最新时间
-  readTimeFromBM8563();
+  // // 从RTC读取最新时间
+  // readTimeFromBM8563();
   
-  // 显示时间和天气信息
-  epd.showTimeDisplay(currentTime, currentWeather);
+  // // 显示时间和天气信息
+  // epd.showTimeDisplay(currentTime, currentWeather);
   
-  Serial.println("Task completed, entering deep sleep...");
-  Serial.flush(); // 确保所有串口数据都已发送
-  delay(1000); // 等待1秒确保信息显示完成
+  // Serial.println("Task completed, entering deep sleep...");
+  // Serial.flush(); // 确保所有串口数据都已发送
+  // delay(1000); // 等待1秒确保信息显示完成
   
-  // 进入深度睡眠
-  enterDeepSleep();
+  // // 进入深度睡眠
+  // enterDeepSleep();
 }
 
 void updateTime() {
@@ -583,8 +594,10 @@ bool writeTimeToBM8563(const DateTime& dt) {
 void setupDeepSleep() {
   Serial.println("Setting up deep sleep...");
   
-  // 清除之前的定时器标志
+  // 清除之前的定时器标志和闹钟标志
   rtc.clearTimerFlag();
+  rtc.clearAlarmFlag();
+  Serial.println("RTC interrupt flags cleared before setting up timer");
   
   // 设置RTC定时器，1分钟唤醒一次
   // 使用1Hz频率，60秒定时
@@ -592,6 +605,7 @@ void setupDeepSleep() {
   
   // 启用定时器中断
   rtc.enableTimerInterrupt(true);
+  Serial.println("Timer interrupt enabled");
   
   // 配置RTC的INT引脚连接到ESP8266的RST引脚用于唤醒
   // 当RTC定时器触发时，INT引脚会产生低电平脉冲，复位ESP8266
