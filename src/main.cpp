@@ -6,7 +6,6 @@
 #include <ArduinoJson.h>
 #include <Wire.h>
 #include <EEPROM.h>
-#include <ESP8266WiFi.h>
 #include <ESP8266mDNS.h>
 #include "../lib/BM8563/BM8563.h"
 #include "../lib/GDEY029T94/GDEY029T94.h"
@@ -16,7 +15,6 @@
 
 // 深度睡眠相关定义
 #define DEEP_SLEEP_DURATION 60  // 1分钟深度睡眠（单位：秒）
-#define WAKEUP_REASON_RTC 0  // RTC唤醒原因
 
 // I2C引脚定义 (根据用户提供的连接)
 #define SDA_PIN 2  // GPIO-2 (D4)
@@ -30,10 +28,6 @@
 
 DateTime currentTime = {0, 0, 0, 0, 0, 0};
 WeatherInfo currentWeather; // 将从EEPROM中读取
-unsigned long lastMillis = 0;
-unsigned long lastFullRefresh = 0;    // 上次全屏刷新时间
-int lastDisplayedMinute = -1;         // 上次显示的分钟数，用于检测分钟变化
-const unsigned long weatherUpdateInterval = 30 * 60 * 1000; // 30分钟更新一次天气
 
 // 创建天气存储对象
 WeatherStorage weatherStorage(512); // 512字节的EEPROM空间
@@ -48,12 +42,8 @@ GDEY029T94 epd(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
 const char* targetSSID = "Sina Plaza Office";
 const char* wifiPassword = "urtheone";
 bool wifiConnected = false;
-unsigned long lastWiFiCheck = 0;
-const unsigned long wifiCheckInterval = 30000; // 30秒检查一次WiFi连接
 
-void updateTime();
 void connectToWiFi();
-void checkWiFiConnection();
 void updateNTPTime();
 void updateWeatherInfo();
 bool fetchWeatherData();
@@ -70,9 +60,6 @@ bool shouldUpdateWeatherFromNetwork();
 
 void setup() {
   delay(50);
-  lastMillis = millis();
-  lastFullRefresh = millis();
-  lastDisplayedMinute = currentTime.minute;
   
   Serial.begin(74880);
   
@@ -162,47 +149,6 @@ void loop() {
   // enterDeepSleep();
 }
 
-void updateTime() {
-  unsigned long currentMillis = millis();
-  
-  if (currentMillis - lastMillis >= 1000) {
-    lastMillis = currentMillis;
-    
-    currentTime.second++;
-    
-    if (currentTime.second >= 60) {
-      currentTime.second = 0;
-      currentTime.minute++;
-      
-      if (currentTime.minute >= 60) {
-        currentTime.minute = 0;
-        currentTime.hour++;
-        
-        if (currentTime.hour >= 24) {
-          currentTime.hour = 0;
-          currentTime.day++;
-          
-          int daysInMonth = 30;
-          if (currentTime.month == 2) daysInMonth = 28;
-          else if (currentTime.month == 4 || currentTime.month == 6 ||
-                   currentTime.month == 9 || currentTime.month == 11) daysInMonth = 30;
-          else daysInMonth = 31;
-          
-          if (currentTime.day > daysInMonth) {
-            currentTime.day = 1;
-            currentTime.month++;
-            
-            if (currentTime.month > 12) {
-              currentTime.month = 1;
-              currentTime.year++;
-              if (currentTime.year > 99) currentTime.year = 0;
-            }
-          }
-        }
-      }
-    }
-  }
-}
 
 // 连接到WiFi网络
 void connectToWiFi() {
@@ -268,27 +214,6 @@ void connectToWiFi() {
   Serial.println("Target network not found: " + String(targetSSID));
 }
 
-// 检查WiFi连接状态
-void checkWiFiConnection() {
-  unsigned long currentMillis = millis();
-  
-  // 每隔一定时间检查WiFi连接状态
-  if (currentMillis - lastWiFiCheck >= wifiCheckInterval) {
-    lastWiFiCheck = currentMillis;
-    
-    if (WiFi.status() != WL_CONNECTED) {
-      Serial.println("WiFi disconnected, trying to reconnect...");
-      wifiConnected = false;
-      connectToWiFi();
-    } else if (!wifiConnected) {
-      // WiFi已连接但标志未设置
-      Serial.println("WiFi reconnected");
-      Serial.print("IP address: ");
-      Serial.println(WiFi.localIP());
-      wifiConnected = true;
-    }
-  }
-}
 
 // 更新NTP时间
 void updateNTPTime() {
