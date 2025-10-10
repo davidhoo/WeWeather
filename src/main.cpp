@@ -11,8 +11,8 @@
 #include "../lib/BM8563/BM8563.h"
 #include "../lib/GDEY029T94/GDEY029T94.h"
 #include "../lib/WeatherStorage/WeatherStorage.h"
-#include "Weather_Symbols_Regular9pt7b.h"
-#include "DSEG7Modern_Bold28pt7b.h"
+#include "../lib/Fonts/Weather_Symbols_Regular9pt7b.h"
+#include "../lib/Fonts/DSEG7Modern_Bold28pt7b.h"
 
 // 深度睡眠相关定义
 #define DEEP_SLEEP_DURATION 60  // 1分钟深度睡眠（单位：秒）
