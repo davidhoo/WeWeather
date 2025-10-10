@@ -54,8 +54,7 @@ bool readTimeFromBM8563();
 bool writeTimeToBM8563(const DateTime& dt);
 
 // 深度睡眠相关函数声明
-void setupDeepSleep();
-void enterDeepSleep();
+void goToDeepSleep();
 bool shouldUpdateWeatherFromNetwork();
 
 void setup() {
@@ -128,10 +127,9 @@ void setup() {
   
   // 显示时间和天气信息
   epd.showTimeDisplay(currentTime, currentWeather);
-  
-  // 设置深度睡眠
-  setupDeepSleep();
-  enterDeepSleep();
+  delay(2000); // 等待2秒确保信息显示完成
+  // 进入深度睡眠
+  goToDeepSleep();
 }
 
 void loop() {
@@ -515,43 +513,30 @@ bool writeTimeToBM8563(const DateTime& dt) {
   }
 }
 
-// 设置深度睡眠
-void setupDeepSleep() {
-  Serial.println("Setting up deep sleep...");
+// 设置并进入深度睡眠
+void goToDeepSleep() {
+  Serial.println("Setting up and entering deep sleep...");
   
   // 清除之前的定时器标志和闹钟标志
   rtc.clearTimerFlag();
   rtc.clearAlarmFlag();
-  Serial.println("RTC interrupt flags cleared before setting up timer");
+  Serial.println("RTC interrupt flags cleared");
   
   // 设置RTC定时器，1分钟唤醒一次
-  // 使用1Hz频率，60秒定时
   rtc.setTimer(60, BM8563_TIMER_1HZ);
   
   // 启用定时器中断
   rtc.enableTimerInterrupt(true);
   Serial.println("Timer interrupt enabled");
   
-  // 配置RTC的INT引脚连接到ESP8266的RST引脚用于唤醒
-  // 当RTC定时器触发时，INT引脚会产生低电平脉冲，复位ESP8266
-  Serial.println("Deep sleep setup complete");
-}
-
-// 进入深度睡眠
-void enterDeepSleep() {
   Serial.println("Entering deep sleep...");
   Serial.flush();
   
   // 等待串口输出完成
   delay(100);
   
-  // 配置ESP8266深度睡眠模式
-  // 由于BM8563的INT引脚连接到ESP8266的RST引脚，我们使用ESP.deepSleep(0)
-  // 当RTC定时器触发时，INT引脚会产生低电平脉冲，复位ESP8266，实现唤醒
+  // 进入深度睡眠，由RTC定时器唤醒
   ESP.deepSleep(0); // 0表示无限期睡眠，直到外部复位
-  
-  // 这行代码不会执行，因为ESP8266已经进入深度睡眠
-  Serial.println("This line should not be printed");
 }
 
 // 判断是否需要从网络更新天气
