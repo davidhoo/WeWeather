@@ -423,3 +423,40 @@ unsigned long WeatherManager::getCurrentUnixTimestamp() {
   
   return now;
 }
+
+String WeatherManager::translateWindDirection(const String& chineseDirection) {
+  if (chineseDirection == "东") return "East";
+  if (chineseDirection == "西") return "West";
+  if (chineseDirection == "南") return "South";
+  if (chineseDirection == "北") return "North";
+  if (chineseDirection == "东北") return "Northeast";
+  if (chineseDirection == "西北") return "Northwest";
+  if (chineseDirection == "东南") return "Southeast";
+  if (chineseDirection == "西南") return "Southwest";
+  return chineseDirection; // 如果没有匹配的，返回原始值
+}
+
+String WeatherManager::formatWindSpeed(const String& windSpeed) {
+  String formatted = windSpeed;
+  formatted.replace("≤", "<=");
+  formatted.replace("≥", ">=");
+  return formatted;
+}
+
+String WeatherManager::getWeatherInfo(const WeatherInfo& currentWeather) {
+  // 格式化天气信息用于显示
+  String weatherString = "";
+  
+  // 按照新格式显示天气信息: 22C 46% NortheEast ≤3
+  weatherString += String(currentWeather.Temperature, 0) + "C ";
+  weatherString += String(currentWeather.Humidity) + "% ";
+  weatherString += translateWindDirection(currentWeather.WindDirection) + " ";
+  weatherString += currentWeather.WindSpeed;
+  
+  return weatherString;
+}
+
+char WeatherManager::getWeatherSymbol(const WeatherInfo& currentWeather) {
+  // 返回天气符号字符
+  return currentWeather.Symbol;
+}

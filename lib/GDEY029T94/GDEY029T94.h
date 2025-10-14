@@ -53,20 +53,8 @@ private:
   // 获取格式化日期字符串
   String getFormattedDate(const DateTime& currentTime);
   
-  // 获取天气信息字符串
-  String getWeatherInfo(const WeatherInfo& currentWeather);
-  
-  // 获取天气符号
-  char getWeatherSymbol(const WeatherInfo& currentWeather);
-  
   // 获取星期几
   String getDayOfWeek(int year, int month, int day);
-  
-  // 将中文风向转换为英文
-  String translateWindDirection(const String& chineseDirection);
-  
-  // 格式化风速字符串
-  String formatWindSpeed(const String& windSpeed);
 };
 
 #endif // GDEY029T94_H

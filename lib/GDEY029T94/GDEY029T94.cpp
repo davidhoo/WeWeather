@@ -18,7 +18,7 @@ void GDEY029T94::setRotation(int rotation) {
 void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo& currentWeather) {
   String timeStr = getFormattedTime(currentTime);
   String dateStr = getFormattedDate(currentTime);
-  String weatherStr = getWeatherInfo(currentWeather);
+  String weatherStr = WeatherManager::getWeatherInfo(currentWeather);
   
   display.setFullWindow();
   display.firstPage();
@@ -41,7 +41,7 @@ void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo&
       display.setFont(&FreeMonoBold9pt7b);
     }
     
-    char symbolStr[2] = {getWeatherSymbol(currentWeather), '\0'};
+    char symbolStr[2] = {WeatherManager::getWeatherSymbol(currentWeather), '\0'};
     int16_t sbx, sby;
     uint16_t sbw, sbh;
     display.getTextBounds(symbolStr, 0, 0, &sbx, &sby, &sbw, &sbh);
@@ -139,41 +139,4 @@ String GDEY029T94::getDayOfWeek(int year, int month, int day) {
   // 转换为星期几字符串（0=周六，1=周日，2=周一...）
   String days[] = {"Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"};
   return days[h];
-}
-
-String GDEY029T94::getWeatherInfo(const WeatherInfo& currentWeather) {
-  // 格式化天气信息用于显示
-  String weatherString = "";
-  
-  // 按照新格式显示天气信息: 22C 46% NortheEast ≤3
-  weatherString += String(currentWeather.Temperature, 0) + "C ";
-  weatherString += String(currentWeather.Humidity) + "% ";
-  weatherString += translateWindDirection(currentWeather.WindDirection) + " ";
-  weatherString += currentWeather.WindSpeed;
-  
-  return weatherString;
-}
-
-char GDEY029T94::getWeatherSymbol(const WeatherInfo& currentWeather) {
-  // 返回天气符号字符
-  return currentWeather.Symbol;
-}
-
-String GDEY029T94::translateWindDirection(const String& chineseDirection) {
-  if (chineseDirection == "东") return "East";
-  if (chineseDirection == "西") return "West";
-  if (chineseDirection == "南") return "South";
-  if (chineseDirection == "北") return "North";
-  if (chineseDirection == "东北") return "Northeast";
-  if (chineseDirection == "西北") return "Northwest";
-  if (chineseDirection == "东南") return "Southeast";
-  if (chineseDirection == "西南") return "Southwest";
-  return chineseDirection; // 如果没有匹配的，返回原始值
-}
-
-String GDEY029T94::formatWindSpeed(const String& windSpeed) {
-  String formatted = windSpeed;
-  formatted.replace("≤", "<=");
-  formatted.replace("≥", ">=");
-  return formatted;
 }

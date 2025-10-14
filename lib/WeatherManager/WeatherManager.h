@@ -76,6 +76,18 @@ public:
   
   // 将天气状况映射到符号
   static char mapWeatherToSymbol(const String& weather);
+  
+  // 将中文风向转换为英文
+  static String translateWindDirection(const String& chineseDirection);
+  
+  // 格式化风速字符串
+  static String formatWindSpeed(const String& windSpeed);
+  
+  // 获取天气信息字符串
+  static String getWeatherInfo(const WeatherInfo& currentWeather);
+  
+  // 获取天气符号
+  static char getWeatherSymbol(const WeatherInfo& currentWeather);
 
 private:
   // API配置
