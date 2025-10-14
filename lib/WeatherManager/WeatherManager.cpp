@@ -451,7 +451,7 @@ String WeatherManager::getWeatherInfo(const WeatherInfo& currentWeather) {
   weatherString += String(currentWeather.Temperature, 0) + "C ";
   weatherString += String(currentWeather.Humidity) + "% ";
   weatherString += translateWindDirection(currentWeather.WindDirection) + " ";
-  weatherString += currentWeather.WindSpeed;
+  weatherString += formatWindSpeed(currentWeather.WindSpeed);
   
   return weatherString;
 }
