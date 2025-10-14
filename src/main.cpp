@@ -62,8 +62,6 @@ void goToDeepSleep();
 bool shouldUpdateWeatherFromNetwork();
 
 void setup() {
-  delay(1000);
-  
   Serial.begin(74880);
   
   Serial.println("System starting up...");
