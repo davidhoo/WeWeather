@@ -16,8 +16,8 @@ void GDEY029T94::setRotation(int rotation) {
 }
 
 void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo& currentWeather) {
-  String timeStr = getFormattedTime(currentTime);
-  String dateStr = getFormattedDate(currentTime);
+  String timeStr = TimeManager::getFormattedTime(currentTime);
+  String dateStr = TimeManager::getFormattedDate(currentTime);
   String weatherStr = WeatherManager::getWeatherInfo(currentWeather);
   
   display.setFullWindow();
@@ -104,39 +104,3 @@ int GDEY029T94::alignToPixel8(int x) {
   return (x / 8) * 8;
 }
 
-String GDEY029T94::getFormattedTime(const DateTime& currentTime) {
-  char timeString[6];
-  sprintf(timeString, "%02d:%02d", currentTime.hour, currentTime.minute);
-  
-  return String(timeString);
-}
-
-String GDEY029T94::getFormattedDate(const DateTime& currentTime) {
-  // 获取完整年份（2000 + 两位数年份）
-  int fullYear = 2000 + currentTime.year;
-  
-  // 获取星期几
-  String dayOfWeek = getDayOfWeek(fullYear, currentTime.month, currentTime.day);
-  
-  char dateString[50];
-  sprintf(dateString, "%04d/%02d/%02d %s", fullYear, currentTime.month, currentTime.day, dayOfWeek.c_str());
-  
-  return String(dateString);
-}
-
-String GDEY029T94::getDayOfWeek(int year, int month, int day) {
-  // 使用Zeller公式计算星期几
-  if (month < 3) {
-    month += 12;
-    year--;
-  }
-  
-  int k = year % 100;
-  int j = year / 100;
-  
-  int h = (day + ((13 * (month + 1)) / 5) + k + (k / 4) + (j / 4) - 2 * j) % 7;
-  
-  // 转换为星期几字符串（0=周六，1=周日，2=周一...）
-  String days[] = {"Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"};
-  return days[h];
-}

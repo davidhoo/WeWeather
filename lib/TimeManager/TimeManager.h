@@ -45,6 +45,15 @@ public:
     // 格式化时间输出（调试用）
     String getFormattedTimeString() const;
     
+    // 获取格式化时间字符串
+    static String getFormattedTime(const DateTime& currentTime);
+    
+    // 获取格式化日期字符串
+    static String getFormattedDate(const DateTime& currentTime);
+    
+    // 获取星期几
+    static String getDayOfWeek(int year, int month, int day);
+    
 private:
     BM8563* _rtc;
     DateTime _currentTime;

@@ -38,14 +38,6 @@ private:
   const GFXfont* timeFont;
   const GFXfont* weatherSymbolFont;
   
-  // 获取格式化时间字符串
-  String getFormattedTime(const DateTime& currentTime);
-  
-  // 获取格式化日期字符串
-  String getFormattedDate(const DateTime& currentTime);
-  
-  // 获取星期几
-  String getDayOfWeek(int year, int month, int day);
 };
 
 #endif // GDEY029T94_H
