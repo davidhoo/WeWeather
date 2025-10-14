@@ -10,6 +10,7 @@
 #include "../lib/BM8563/BM8563.h"
 #include "../lib/GDEY029T94/GDEY029T94.h"
 #include "../lib/WeatherStorage/WeatherStorage.h"
+#include "../lib/WiFiManager/WiFiManager.h"
 #include "../lib/Fonts/Weather_Symbols_Regular9pt7b.h"
 #include "../lib/Fonts/DSEG7Modern_Bold28pt7b.h"
 
@@ -38,16 +39,12 @@ BM8563 rtc(SDA_PIN, SCL_PIN);
 // 创建GDEY029T94对象实例
 GDEY029T94 epd(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
 
-// WiFi配置
-const char* targetSSID = "Sina Plaza Office";
-const char* wifiPassword = "urtheone";
-bool wifiConnected = false;
+// 创建WiFiManager对象实例
+WiFiManager wifiManager;
 
 // 高德地图API配置
 const char* AMAP_API_KEY = "b4bed4011e9375d01423a45fba58e836";
 String cityCode = "110108";  // 北京海淀区，可根据需要修改
-
-void connectToWiFi();
 void updateNTPTime();
 void updateWeatherInfo();
 bool fetchWeatherData();
@@ -111,13 +108,11 @@ void setup() {
   if (shouldUpdateWeatherFromNetwork()) {
     Serial.println("Weather data is outdated, updating from network...");
     
-    // 初始化WiFi连接
-    WiFi.mode(WIFI_STA);
-    WiFi.begin();
-    connectToWiFi();
+    // 初始化WiFi连接（使用默认配置）
+    wifiManager.begin();
     
     // 如果WiFi连接成功，更新NTP时间和天气信息
-    if (wifiConnected) {
+    if (wifiManager.autoConnect()) {
       updateNTPTime();
       updateWeatherInfo();
     } else {
@@ -139,74 +134,9 @@ void loop() {
 }
 
 
-// 连接到WiFi网络
-void connectToWiFi() {
-  Serial.println("Scanning for WiFi networks...");
-  
-  // 扫描WiFi网络
-  int n = WiFi.scanNetworks();
-  Serial.println("Scan done");
-  
-  if (n == 0) {
-    Serial.println("No WiFi networks found");
-    return;
-  }
-  
-  Serial.print(n);
-  Serial.println(" networks found");
-  
-  // 查找目标网络
-  for (int i = 0; i < n; ++i) {
-    Serial.print(i + 1);
-    Serial.print(": ");
-    Serial.print(WiFi.SSID(i));
-    Serial.print(" (");
-    Serial.print(WiFi.RSSI(i));
-    Serial.print(")");
-    Serial.println((WiFi.encryptionType(i) == ENC_TYPE_NONE) ? " " : "*");
-    
-    // 检查是否为目标SSID
-    if (WiFi.SSID(i) == targetSSID) {
-      Serial.println("Found target network: " + String(targetSSID));
-      
-      // 连接到目标网络
-      WiFi.begin(targetSSID, wifiPassword);
-      
-      Serial.println("Connecting to WiFi...");
-      unsigned long startAttemptTime = millis();
-      
-      // 等待连接结果，最多等待10秒
-      while (WiFi.status() != WL_CONNECTED &&
-             millis() - startAttemptTime < 10000) {
-        delay(100);
-        Serial.print(".");
-      }
-      
-      // 检查连接结果
-      if (WiFi.status() == WL_CONNECTED) {
-        Serial.println("");
-        Serial.println("WiFi connected");
-        Serial.print("IP address: ");
-        Serial.println(WiFi.localIP());
-        wifiConnected = true;
-        
-        // 注意：不要在这里更新NTP时间和天气信息，因为setup函数中已经根据时间间隔判断是否需要更新
-      } else {
-        Serial.println("");
-        Serial.println("Failed to connect to WiFi");
-        wifiConnected = false;
-      }
-      return;
-    }
-  }
-  
-  Serial.println("Target network not found: " + String(targetSSID));
-}
-
-
 // 更新NTP时间
 void updateNTPTime() {
-  if (!wifiConnected) {
+  if (!wifiManager.isConnected()) {
     Serial.println("WiFi not connected, skipping NTP update");
     return;
   }
@@ -261,7 +191,7 @@ void updateNTPTime() {
 
 // 获取天气数据
 bool fetchWeatherData() {
-  if (WiFi.status() != WL_CONNECTED) {
+  if (!wifiManager.isConnected()) {
     Serial.println("WiFi not connected, skipping weather update");
     return false;
   }

@@ -1,0 +1,271 @@
+#include "WiFiManager.h"
+
+WiFiManager::WiFiManager() {
+  _initialized = false;
+  setDefaultConfig();
+}
+
+void WiFiManager::begin() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin();
+  _initialized = true;
+  Serial.println("WiFiManager initialized with default config");
+  printConfig();
+}
+
+void WiFiManager::begin(const WiFiConfig& config) {
+  setConfig(config);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin();
+  _initialized = true;
+  Serial.println("WiFiManager initialized with custom config");
+  printConfig();
+}
+
+void WiFiManager::setDefaultConfig() {
+  // 设置默认的 WiFi 配置
+  _copyString(_config.ssid, "Sina Plaza Office", sizeof(_config.ssid));
+  _copyString(_config.password, "urtheone", sizeof(_config.password));
+  _config.timeout = 10000; // 10秒超时
+  _config.autoReconnect = true;
+  _config.maxRetries = 3;
+}
+
+void WiFiManager::setCredentials(const char* ssid, const char* password) {
+  _copyString(_config.ssid, ssid, sizeof(_config.ssid));
+  _copyString(_config.password, password, sizeof(_config.password));
+  
+  Serial.println("WiFi credentials updated for SSID: " + String(_config.ssid));
+}
+
+void WiFiManager::setConfig(const WiFiConfig& config) {
+  _config = config;
+  Serial.println("WiFi configuration updated");
+}
+
+WiFiConfig WiFiManager::getConfig() const {
+  return _config;
+}
+
+bool WiFiManager::connect(unsigned long timeout) {
+  if (!_initialized) {
+    Serial.println("WiFiManager not initialized. Call begin() first.");
+    return false;
+  }
+  
+  if (strlen(_config.ssid) == 0) {
+    Serial.println("WiFi SSID not set. Call setCredentials() first.");
+    return false;
+  }
+  
+  unsigned long connectTimeout = (timeout == 0) ? _config.timeout : timeout;
+  
+  Serial.println("Connecting to WiFi: " + String(_config.ssid));
+  WiFi.begin(_config.ssid, _config.password);
+  
+  return _waitForConnection(connectTimeout);
+}
+
+bool WiFiManager::scanAndConnect(unsigned long timeout) {
+  if (!_initialized) {
+    Serial.println("WiFiManager not initialized. Call begin() first.");
+    return false;
+  }
+  
+  if (strlen(_config.ssid) == 0) {
+    Serial.println("WiFi SSID not set. Call setCredentials() first.");
+    return false;
+  }
+  
+  unsigned long connectTimeout = (timeout == 0) ? _config.timeout : timeout;
+  
+  Serial.println("Scanning for WiFi networks...");
+  
+  // 扫描WiFi网络
+  int n = WiFi.scanNetworks();
+  Serial.println("Scan done");
+  
+  if (n == 0) {
+    Serial.println("No WiFi networks found");
+    return false;
+  }
+  
+  Serial.print(n);
+  Serial.println(" networks found");
+  
+  // 查找目标网络
+  for (int i = 0; i < n; ++i) {
+    _printNetworkInfo(i);
+    
+    // 检查是否为目标SSID
+    if (WiFi.SSID(i) == String(_config.ssid)) {
+      Serial.println("Found target network: " + String(_config.ssid));
+      
+      // 连接到目标网络
+      WiFi.begin(_config.ssid, _config.password);
+      
+      Serial.println("Connecting to WiFi...");
+      return _waitForConnection(connectTimeout);
+    }
+  }
+  
+  Serial.println("Target network not found: " + String(_config.ssid));
+  return false;
+}
+
+bool WiFiManager::autoConnect() {
+  if (!_initialized) {
+    Serial.println("WiFiManager not initialized. Call begin() first.");
+    return false;
+  }
+  
+  int retries = 0;
+  bool connected = false;
+  
+  while (retries < _config.maxRetries && !connected) {
+    Serial.println("Auto-connect attempt " + String(retries + 1) + "/" + String(_config.maxRetries));
+    
+    connected = scanAndConnect();
+    
+    if (!connected && _config.autoReconnect) {
+      retries++;
+      if (retries < _config.maxRetries) {
+        Serial.println("Retrying in 2 seconds...");
+        delay(2000);
+      }
+    } else {
+      break;
+    }
+  }
+  
+  if (connected) {
+    Serial.println("Auto-connect successful");
+  } else {
+    Serial.println("Auto-connect failed after " + String(_config.maxRetries) + " attempts");
+  }
+  
+  return connected;
+}
+
+bool WiFiManager::isConnected() {
+  return WiFi.status() == WL_CONNECTED;
+}
+
+void WiFiManager::disconnect() {
+  WiFi.disconnect();
+  Serial.println("WiFi disconnected");
+}
+
+String WiFiManager::getLocalIP() {
+  if (isConnected()) {
+    return WiFi.localIP().toString();
+  }
+  return "0.0.0.0";
+}
+
+int WiFiManager::getRSSI() {
+  if (isConnected()) {
+    return WiFi.RSSI();
+  }
+  return 0;
+}
+
+int WiFiManager::scanNetworks() {
+  return WiFi.scanNetworks();
+}
+
+String WiFiManager::getScannedSSID(int index) {
+  return WiFi.SSID(index);
+}
+
+int WiFiManager::getScannedRSSI(int index) {
+  return WiFi.RSSI(index);
+}
+
+bool WiFiManager::isScannedNetworkSecure(int index) {
+  return WiFi.encryptionType(index) != ENC_TYPE_NONE;
+}
+
+void WiFiManager::setTimeout(unsigned long timeout) {
+  _config.timeout = timeout;
+}
+
+void WiFiManager::setAutoReconnect(bool enable) {
+  _config.autoReconnect = enable;
+}
+
+void WiFiManager::setMaxRetries(int retries) {
+  _config.maxRetries = retries;
+}
+
+String WiFiManager::getStatusString() {
+  switch (WiFi.status()) {
+    case WL_CONNECTED:
+      return "Connected";
+    case WL_NO_SSID_AVAIL:
+      return "SSID not available";
+    case WL_CONNECT_FAILED:
+      return "Connection failed";
+    case WL_WRONG_PASSWORD:
+      return "Wrong password";
+    case WL_DISCONNECTED:
+      return "Disconnected";
+    case WL_IDLE_STATUS:
+      return "Idle";
+    default:
+      return "Unknown status";
+  }
+}
+
+void WiFiManager::printConfig() {
+  Serial.println("=== WiFi Configuration ===");
+  Serial.println("SSID: " + String(_config.ssid));
+  Serial.println("password: " + String(_config.password[0] ? "***" : "Not set"));
+  Serial.println("Timeout: " + String(_config.timeout) + "ms");
+  Serial.println("Auto Reconnect: " + String(_config.autoReconnect ? "Enabled" : "Disabled"));
+  Serial.println("Max Retries: " + String(_config.maxRetries));
+  Serial.println("========================");
+}
+
+void WiFiManager::_printNetworkInfo(int networkIndex) {
+  Serial.print(networkIndex + 1);
+  Serial.print(": ");
+  Serial.print(WiFi.SSID(networkIndex));
+  Serial.print(" (");
+  Serial.print(WiFi.RSSI(networkIndex));
+  Serial.print(")");
+  Serial.println((WiFi.encryptionType(networkIndex) == ENC_TYPE_NONE) ? " " : "*");
+}
+
+bool WiFiManager::_waitForConnection(unsigned long timeout) {
+  unsigned long startAttemptTime = millis();
+  
+  // 等待连接结果
+  while (WiFi.status() != WL_CONNECTED &&
+         millis() - startAttemptTime < timeout) {
+    delay(100);
+    Serial.print(".");
+  }
+  
+  // 检查连接结果
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("");
+    Serial.println("WiFi connected successfully");
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
+    Serial.print("Signal strength: ");
+    Serial.print(WiFi.RSSI());
+    Serial.println(" dBm");
+    return true;
+  } else {
+    Serial.println("");
+    Serial.println("Failed to connect to WiFi");
+    Serial.println("Status: " + getStatusString());
+    return false;
+  }
+}
+
+void WiFiManager::_copyString(char* dest, const char* src, size_t maxLen) {
+  strncpy(dest, src, maxLen - 1);
+  dest[maxLen - 1] = '\0';
+}
