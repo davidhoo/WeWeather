@@ -1,4 +1,5 @@
 #include "GDEY029T94.h"
+#include "../WeatherManager/WeatherManager.h"
 
 GDEY029T94::GDEY029T94(uint8_t cs, uint8_t dc, uint8_t rst, uint8_t busy)
   : display(GxEPD2_290_GDEY029T94(cs, dc, rst, busy)), 

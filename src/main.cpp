@@ -1,15 +1,11 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
-#include <ESP8266HTTPClient.h>
-#include <WiFiClientSecure.h>
 #include <time.h>
-#include <ArduinoJson.h>
 #include <Wire.h>
-#include <EEPROM.h>
 #include <ESP8266mDNS.h>
 #include "../lib/BM8563/BM8563.h"
 #include "../lib/GDEY029T94/GDEY029T94.h"
-#include "../lib/WeatherStorage/WeatherStorage.h"
+#include "../lib/WeatherManager/WeatherManager.h"
 #include "../lib/WiFiManager/WiFiManager.h"
 #include "../lib/Fonts/Weather_Symbols_Regular9pt7b.h"
 #include "../lib/Fonts/DSEG7Modern_Bold28pt7b.h"
@@ -28,10 +24,6 @@
 #define EPD_BUSY  D1
 
 DateTime currentTime = {0, 0, 0, 0, 0, 0};
-WeatherInfo currentWeather; // 将从EEPROM中读取
-
-// 创建天气存储对象
-WeatherStorage weatherStorage(512); // 512字节的EEPROM空间
 
 // 创建BM8563对象实例
 BM8563 rtc(SDA_PIN, SCL_PIN);
@@ -45,10 +37,12 @@ WiFiManager wifiManager;
 // 高德地图API配置
 const char* AMAP_API_KEY = "b4bed4011e9375d01423a45fba58e836";
 String cityCode = "110108";  // 北京海淀区，可根据需要修改
+
+// 创建WeatherManager对象实例
+WeatherManager weatherManager(AMAP_API_KEY, cityCode, &rtc, 512);
+
+// 函数声明
 void updateNTPTime();
-void updateWeatherInfo();
-bool fetchWeatherData();
-char mapWeatherToSymbol(const String& weather);
 
 // BM8563 RTC 函数声明
 bool readTimeFromBM8563();
@@ -56,27 +50,14 @@ bool writeTimeToBM8563(const DateTime& dt);
 
 // 深度睡眠相关函数声明
 void goToDeepSleep();
-bool shouldUpdateWeatherFromNetwork();
 
 void setup() {
   Serial.begin(74880);
   
   Serial.println("System starting up...");
   
-  // 初始化天气存储
-  weatherStorage.begin();
-  
-  // 从EEPROM读取天气信息
-  if (!weatherStorage.readWeatherInfo(currentWeather)) {
-    Serial.println("Using default weather values");
-    // 设置默认天气值
-    currentWeather.Temperature = 23.5;
-    currentWeather.Humidity = 65;
-    currentWeather.Symbol = 'n';
-    currentWeather.WindDirection = "北";
-    currentWeather.WindSpeed = "≤3";
-    currentWeather.Weather = "晴";
-  }
+  // 初始化WeatherManager
+  weatherManager.begin();
   
   // 初始化GDEY029T94墨水屏
   epd.begin();
@@ -105,7 +86,7 @@ void setup() {
   readTimeFromBM8563();
   
   // 判断是否需要从网络更新天气
-  if (shouldUpdateWeatherFromNetwork()) {
+  if (weatherManager.shouldUpdateFromNetwork()) {
     Serial.println("Weather data is outdated, updating from network...");
     
     // 初始化WiFi连接（使用默认配置）
@@ -114,7 +95,7 @@ void setup() {
     // 如果WiFi连接成功，更新NTP时间和天气信息
     if (wifiManager.autoConnect()) {
       updateNTPTime();
-      updateWeatherInfo();
+      weatherManager.updateWeather(true);
     } else {
       Serial.println("WiFi connection failed, using cached data");
     }
@@ -122,7 +103,8 @@ void setup() {
     Serial.println("Weather data is recent, using cached data");
   }
   
-  // 显示时间和天气信息
+  // 获取当前天气信息并显示
+  WeatherInfo currentWeather = weatherManager.getCurrentWeather();
   epd.showTimeDisplay(currentTime, currentWeather);
   
   // 进入深度睡眠
@@ -189,183 +171,6 @@ void updateNTPTime() {
   Serial.println(timeinfo->tm_sec);
 }
 
-// 获取天气数据
-bool fetchWeatherData() {
-  if (!wifiManager.isConnected()) {
-    Serial.println("WiFi not connected, skipping weather update");
-    return false;
-  }
-
-  HTTPClient http;
-  WiFiClientSecure client;
-  // API URL
-  String url = "https://restapi.amap.com/v3/weather/weatherInfo?key=" + String(AMAP_API_KEY) + "&city=" + cityCode + "&extensions=base&output=JSON";
-  
-  Serial.println("Fetching weather data from: " + url);
-  
-  client.setInsecure(); // 跳过SSL证书验证
-  http.begin(client, url);
-  http.setTimeout(5000); // 5秒超时
-  
-  int httpResponseCode = http.GET();
-  
-  if (httpResponseCode == 200) {
-    String payload = http.getString();
-    Serial.println("Weather data received: " + payload);
-    
-    // 解析JSON数据
-    JsonDocument doc; // 根据实际需要调整大小
-    DeserializationError error = deserializeJson(doc, payload);
-    
-    if (error) {
-      Serial.println("Failed to parse JSON: " + String(error.c_str()));
-      http.end();
-      return false;
-    }
-    
-    // 检查status是否为"1"
-    String status = doc["status"].as<String>();
-    if (status != "1") {
-      Serial.println("API returned error status: " + status);
-      http.end();
-      return false;
-    }
-    
-    // 获取lives数据
-    JsonObject lives = doc["lives"][0];
-    
-    // 更新WeatherInfo
-    currentWeather.Temperature = lives["temperature"].as<float>();
-    currentWeather.Humidity = lives["humidity"].as<int>();
-    currentWeather.WindDirection = lives["winddirection"].as<String>();
-    currentWeather.WindSpeed = lives["windpower"].as<String>();
-    currentWeather.Weather = lives["weather"].as<String>();
-    
-    // 根据天气状况设置符号
-    currentWeather.Symbol = mapWeatherToSymbol(currentWeather.Weather);
-    
-    Serial.println("Weather updated successfully");
-    Serial.println("Temperature: " + String(currentWeather.Temperature));
-    Serial.println("Humidity: " + String(currentWeather.Humidity));
-    Serial.println("Wind Direction: " + currentWeather.WindDirection);
-    Serial.println("Wind Speed: " + currentWeather.WindSpeed);
-    Serial.println("Weather: " + currentWeather.Weather);
-    Serial.println("Symbol: " + String(currentWeather.Symbol));
-    
-    http.end();
-    return true;
-  } else {
-    Serial.println("HTTP request failed with code: " + String(httpResponseCode));
-    http.end();
-    return false;
-  }
-}
-
-// 更新天气信息
-void updateWeatherInfo() {
-  Serial.println("Updating weather information...");
-  
-  if (fetchWeatherData()) {
-    // 尝试从系统获取当前Unix时间戳（如果有WiFi连接）
-    time_t now = time(nullptr);
-    
-    // 如果系统时间不可用，从RTC获取时间并转换为Unix时间戳
-    if (now == 0 || now == 1) {  // 添加对now==1的检查
-      Serial.println("System time not available, using RTC time");
-      
-      // 从RTC获取时间
-      BM8563_Time rtcTime;
-      if (rtc.getTime(&rtcTime)) {
-        // 将RTC时间转换为Unix时间戳
-        struct tm timeinfo = {0};
-        timeinfo.tm_year = 2000 + rtcTime.years - 1900;  // 转换为从1900开始的年份
-        timeinfo.tm_mon = rtcTime.months - 1;               // 月份是0-11
-        timeinfo.tm_mday = rtcTime.days;
-        timeinfo.tm_hour = rtcTime.hours;
-        timeinfo.tm_min = rtcTime.minutes;
-        timeinfo.tm_sec = rtcTime.seconds;
-        
-        // 设置时区为UTC+8
-        timeinfo.tm_isdst = -1;  // 让系统决定是否使用夏令时
-        
-        // 转换为Unix时间戳（UTC时间）
-        now = mktime(&timeinfo);
-        
-        // 由于RTC时间是UTC+8时区，需要减去8小时的秒数，转换为UTC时间戳
-        if (now != (time_t)-1) {
-          now -= 8 * 3600;
-        }
-        
-        if (now == (time_t)-1) {
-          Serial.println("Failed to convert RTC time to Unix timestamp");
-        } else {
-          Serial.print("RTC time converted to Unix timestamp: ");
-          Serial.println(now);
-        }
-      } else {
-        Serial.println("Failed to read time from RTC");
-      }
-    }
-    
-    // 如果成功获取到时间戳，保存到EEPROM
-    if (now != 0 && now != 1 && now != (time_t)-1) {  // 添加对now==1的检查
-      // 使用Unix时间戳设置更新时间
-      if (weatherStorage.setUpdateTime(now)) {
-        Serial.print("Weather data updated with Unix timestamp: ");
-        Serial.println(now);
-      } else {
-        Serial.println("Failed to update timestamp");
-      }
-    } else {
-      Serial.println("Failed to get valid timestamp");
-    }
-    
-    // 天气更新成功，保存到EEPROM
-    if (weatherStorage.writeWeatherInfo(currentWeather)) {
-      Serial.println("Weather data saved to EEPROM successfully");
-    } else {
-      Serial.println("Failed to save weather data to EEPROM");
-    }
-    // 刷新显示
-    epd.showTimeDisplay(currentTime, currentWeather);
-  }
-}
-
-// 将天气状况映射到符号
-char mapWeatherToSymbol(const String& weather) {
-  // Weather symbol mapping:
-  // n=晴(sunny), d=雪(snow), m=雨(rain), l=雾(fog), c=阴(overcast), o=多云(cloudy), k=雷雨(thunderstorm)
-  
-  if (weather.indexOf("晴") >= 0) {
-    return 'n'; // 晴天
-  } else if (weather.indexOf("雷") >= 0 && weather.indexOf("雨") >= 0) {
-    return 'k'; // 雷雨
-  } else if (weather.indexOf("雪") >= 0) {
-    return 'd'; // 雪
-  } else if (weather.indexOf("雨") >= 0) {
-    return 'm'; // 雨
-  } else if (weather.indexOf("雷") >= 0) {
-    return 'a'; // 雷
-  } else if (weather.indexOf("雾") >= 0) {
-    return 'l'; // 雾
-  } else if (weather.indexOf("阴") >= 0) {
-    return 'c'; // 阴
-  } else if (weather.indexOf("多云") >= 0) {
-    return 'o'; // 多云
-  }else if (weather.indexOf("少云") >= 0) {
-    return 'p'; // 少云
-  } else if (weather.indexOf("晴间多云") >= 0) {
-    return 'c'; // 晴间多云
-  } else if (weather.indexOf("风") >= 0) {
-    return 'f'; // 风
-  } else if (weather.indexOf("冷") >= 0) {
-    return 'e'; // 冷
-  } else if (weather.indexOf("热") >= 0) {
-    return 'h'; // 热
-  } else {
-    return 'n'; // 默认晴天 abcdefghijklmnop
-  }
-}
 
 // 从BM8563读取时间
 bool readTimeFromBM8563() {
@@ -460,76 +265,3 @@ void goToDeepSleep() {
   ESP.deepSleep(0); // 0表示无限期睡眠，直到外部复位
 }
 
-// 判断是否需要从网络更新天气
-bool shouldUpdateWeatherFromNetwork() {
-  unsigned long lastUpdateTime = weatherStorage.getLastUpdateTime();
-  
-  // 如果从未更新过，应该更新
-  if (lastUpdateTime == 0) {
-    Serial.println("No previous weather data, need to update from network");
-    return true;
-  }
-  
-  // 尝试从系统获取当前Unix时间戳（如果有WiFi连接）
-  time_t now = time(nullptr);
-  
-  // 如果系统时间不可用，从RTC获取时间并转换为Unix时间戳
-  if (now == 0 || now == 1) {  // 添加对now==1的检查
-    Serial.println("System time not available, using RTC time");
-    
-    // 从RTC获取时间
-    BM8563_Time rtcTime;
-    if (!rtc.getTime(&rtcTime)) {
-      Serial.println("Failed to read time from RTC, need to update from network");
-      return true;
-    }
-    
-    // 将RTC时间转换为Unix时间戳
-    // 注意：这是一个简化的转换，假设RTC时间是准确的
-    struct tm timeinfo = {0};
-    timeinfo.tm_year = 2000 + rtcTime.years - 1900;  // 转换为从1900开始的年份
-    timeinfo.tm_mon = rtcTime.months - 1;               // 月份是0-11
-    timeinfo.tm_mday = rtcTime.days;
-    timeinfo.tm_hour = rtcTime.hours;
-    timeinfo.tm_min = rtcTime.minutes;
-    timeinfo.tm_sec = rtcTime.seconds;
-    
-    // 设置时区为UTC+8
-    timeinfo.tm_isdst = -1;  // 让系统决定是否使用夏令时
-    
-    // 转换为Unix时间戳（UTC时间）
-    now = mktime(&timeinfo);
-    
-    // 由于RTC时间是UTC+8时区，需要减去8小时的秒数，转换为UTC时间戳
-    if (now != (time_t)-1) {
-      now -= 8 * 3600;
-    }
-    
-    if (now == (time_t)-1) {
-      Serial.println("Failed to convert RTC time to Unix timestamp, need to update from network");
-      return true;
-    }
-    
-    Serial.print("RTC time converted to Unix timestamp: ");
-    Serial.println(now);
-  }
-  
-  // 计算时间差（秒）
-  unsigned long timeDiffSeconds = now - lastUpdateTime;
-  
-  // 检查是否超过了30分钟更新间隔（30 * 60 = 1800秒）
-  bool shouldUpdate = timeDiffSeconds >= 1800;
-  
-  Serial.print("Current Unix time: ");
-  Serial.print(now);
-  Serial.print(", Last update: ");
-  Serial.print(lastUpdateTime);
-  Serial.print(", Diff: ");
-  Serial.print(timeDiffSeconds);
-  Serial.print(" seconds (");
-  Serial.print(timeDiffSeconds / 60);
-  Serial.print(" minutes), ");
-  Serial.println(shouldUpdate ? "need to update from network" : "using cached data");
-  
-  return shouldUpdate;
-}

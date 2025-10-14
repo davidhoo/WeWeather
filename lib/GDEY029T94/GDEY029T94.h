@@ -6,6 +6,9 @@
 #include <GxEPD2_3C.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
 
+// 前向声明 WeatherInfo 结构体（在 WeatherManager.h 中定义）
+struct WeatherInfo;
+
 // 日期时间结构体
 struct DateTime {
   int year;
@@ -14,18 +17,6 @@ struct DateTime {
   int hour;
   int minute;
   int second;
-};
-
-// 天气信息结构体
-struct WeatherInfo {
-  float Temperature;    // 温度（摄氏度）
-  int Humidity;         // 湿度百分比
-  char Symbol;          // 天气符号字符
-  String WindDirection; // 风向
-  String WindSpeed;     // 风速
-  String Weather;       // 天气状况
-  // 天气符号映射:
-  // n=晴(sunny), d=雪(snow), m=雨(rain), l=雾(fog), c=阴(overcast), o=多云(cloudy), k=雷雨(thunderstorm)
 };
 
 class GDEY029T94 {
