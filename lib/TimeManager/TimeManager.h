@@ -5,9 +5,15 @@
 #include <ESP8266WiFi.h>
 #include <time.h>
 #include "../BM8563/BM8563.h"
-#include "../GDEY029T94/GDEY029T94.h"
-
-// 使用 GDEY029T94.h 中已定义的 DateTime 结构体
+// 日期时间结构体
+struct DateTime {
+  int year;
+  int month;
+  int day;
+  int hour;
+  int minute;
+  int second;
+};
 
 class TimeManager {
 public:

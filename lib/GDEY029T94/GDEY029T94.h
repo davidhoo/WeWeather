@@ -5,19 +5,10 @@
 #include <GxEPD2_BW.h>
 #include <GxEPD2_3C.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
+#include "../TimeManager/TimeManager.h"
 
 // 前向声明 WeatherInfo 结构体（在 WeatherManager.h 中定义）
 struct WeatherInfo;
-
-// 日期时间结构体
-struct DateTime {
-  int year;
-  int month;
-  int day;
-  int hour;
-  int minute;
-  int second;
-};
 
 class GDEY029T94 {
 public:
