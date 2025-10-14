@@ -129,24 +129,13 @@ void setup() {
   
   // 显示时间和天气信息
   epd.showTimeDisplay(currentTime, currentWeather);
-  delay(2000); // 等待2秒确保信息显示完成
+  
   // 进入深度睡眠
   goToDeepSleep();
 }
 
 void loop() {
-  // // 从RTC读取最新时间
-  // readTimeFromBM8563();
-  
-  // // 显示时间和天气信息
-  // epd.showTimeDisplay(currentTime, currentWeather);
-  
-  // Serial.println("Task completed, entering deep sleep...");
-  // Serial.flush(); // 确保所有串口数据都已发送
-  // delay(1000); // 等待1秒确保信息显示完成
-  
-  // // 进入深度睡眠
-  // enterDeepSleep();
+
 }
 
 
