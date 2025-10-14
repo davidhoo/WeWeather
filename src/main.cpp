@@ -43,6 +43,10 @@ const char* targetSSID = "Sina Plaza Office";
 const char* wifiPassword = "urtheone";
 bool wifiConnected = false;
 
+// 高德地图API配置
+const char* AMAP_API_KEY = "b4bed4011e9375d01423a45fba58e836";
+String cityCode = "110108";  // 北京海淀区，可根据需要修改
+
 void connectToWiFi();
 void updateNTPTime();
 void updateWeatherInfo();
@@ -58,7 +62,7 @@ void goToDeepSleep();
 bool shouldUpdateWeatherFromNetwork();
 
 void setup() {
-  delay(50);
+  delay(1000);
   
   Serial.begin(74880);
   
@@ -278,7 +282,7 @@ bool fetchWeatherData() {
   HTTPClient http;
   WiFiClientSecure client;
   // API URL
-  String url = "https://restapi.amap.com/v3/weather/weatherInfo?key=b4bed4011e9375d01423a45fba58e836&city=110108&extensions=base&output=JSON";
+  String url = "https://restapi.amap.com/v3/weather/weatherInfo?key=" + String(AMAP_API_KEY) + "&city=" + cityCode + "&extensions=base&output=JSON";
   
   Serial.println("Fetching weather data from: " + url);
   
