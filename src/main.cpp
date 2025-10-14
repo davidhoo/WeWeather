@@ -7,6 +7,7 @@
 #include "../lib/GDEY029T94/GDEY029T94.h"
 #include "../lib/WeatherManager/WeatherManager.h"
 #include "../lib/WiFiManager/WiFiManager.h"
+#include "../lib/TimeManager/TimeManager.h"
 #include "../lib/Fonts/Weather_Symbols_Regular9pt7b.h"
 #include "../lib/Fonts/DSEG7Modern_Bold28pt7b.h"
 
@@ -23,10 +24,11 @@
 #define EPD_RST   D0
 #define EPD_BUSY  D1
 
-DateTime currentTime = {0, 0, 0, 0, 0, 0};
-
 // 创建BM8563对象实例
 BM8563 rtc(SDA_PIN, SCL_PIN);
+
+// 创建TimeManager对象实例
+TimeManager timeManager(&rtc);
 
 // 创建GDEY029T94对象实例
 GDEY029T94 epd(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
@@ -40,13 +42,6 @@ String cityCode = "110108";  // 北京海淀区，可根据需要修改
 
 // 创建WeatherManager对象实例
 WeatherManager weatherManager(AMAP_API_KEY, cityCode, &rtc, 512);
-
-// 函数声明
-void updateNTPTime();
-
-// BM8563 RTC 函数声明
-bool readTimeFromBM8563();
-bool writeTimeToBM8563(const DateTime& dt);
 
 // 深度睡眠相关函数声明
 void goToDeepSleep();
@@ -82,8 +77,8 @@ void setup() {
     Serial.println("Failed to initialize BM8563 RTC");
   }
   
-  // 从RTC读取时间
-  readTimeFromBM8563();
+  // 初始化TimeManager并从RTC读取时间
+  timeManager.begin();
   
   // 判断是否需要从网络更新天气
   if (weatherManager.shouldUpdateFromNetwork()) {
@@ -94,10 +89,12 @@ void setup() {
     
     // 如果WiFi连接成功，更新NTP时间和天气信息
     if (wifiManager.autoConnect()) {
-      updateNTPTime();
+      timeManager.setWiFiConnected(true);
+      timeManager.updateNTPTime();
       weatherManager.updateWeather(true);
     } else {
       Serial.println("WiFi connection failed, using cached data");
+      timeManager.setWiFiConnected(false);
     }
   } else {
     Serial.println("Weather data is recent, using cached data");
@@ -105,6 +102,7 @@ void setup() {
   
   // 获取当前天气信息并显示
   WeatherInfo currentWeather = weatherManager.getCurrentWeather();
+  DateTime currentTime = timeManager.getCurrentTime();
   epd.showTimeDisplay(currentTime, currentWeather);
   
   // 进入深度睡眠
@@ -116,128 +114,6 @@ void loop() {
 }
 
 
-// 更新NTP时间
-void updateNTPTime() {
-  if (!wifiManager.isConnected()) {
-    Serial.println("WiFi not connected, skipping NTP update");
-    return;
-  }
-  
-  Serial.println("Updating time from NTP server...");
-  
-  // 配置NTP服务器和时区
-  configTime(8 * 3600, 0, "ntp.aliyun.com", "ntp1.aliyun.com", "ntp2.aliyun.com");
-  
-  // 等待时间同步
-  int retryCount = 0;
-  const int maxRetries = 10;
-  while (time(nullptr) < 1000000000 && retryCount < maxRetries) {
-    delay(500);
-    retryCount++;
-    Serial.print(".");
-  }
-  
-  if (retryCount >= maxRetries) {
-    Serial.println("Failed to get time from NTP server");
-    return;
-  }
-  
-  // 获取时间
-  time_t now = time(nullptr);
-  struct tm* timeinfo = localtime(&now);
-  
-  // 更新系统时间
-  currentTime.year = (timeinfo->tm_year + 1900) % 100;  // 转换为两位数年份
-  currentTime.month = timeinfo->tm_mon + 1;            // tm_mon是从0开始的
-  currentTime.day = timeinfo->tm_mday;
-  currentTime.hour = timeinfo->tm_hour;
-  currentTime.minute = timeinfo->tm_min;
-  currentTime.second = timeinfo->tm_sec;
-  
-  // 同步时间到BM8563 RTC
-  writeTimeToBM8563(currentTime);
-  
-  Serial.print("Time updated from NTP: ");
-  Serial.print(timeinfo->tm_year + 1900);
-  Serial.print("/");
-  Serial.print(timeinfo->tm_mon + 1);
-  Serial.print("/");
-  Serial.print(timeinfo->tm_mday);
-  Serial.print(" ");
-  Serial.print(timeinfo->tm_hour);
-  Serial.print(":");
-  Serial.print(timeinfo->tm_min);
-  Serial.print(":");
-  Serial.println(timeinfo->tm_sec);
-}
-
-
-// 从BM8563读取时间
-bool readTimeFromBM8563() {
-  BM8563_Time rtcTime;
-  
-  if (rtc.getTime(&rtcTime)) {
-    // 更新currentTime
-    currentTime.second = rtcTime.seconds;
-    currentTime.minute = rtcTime.minutes;
-    currentTime.hour = rtcTime.hours;
-    currentTime.day = rtcTime.days;
-    currentTime.month = rtcTime.months;
-    currentTime.year = rtcTime.years;
-    
-    Serial.print("Time read from BM8563: ");
-    Serial.print(2000 + currentTime.year);
-    Serial.print("/");
-    Serial.print(currentTime.month);
-    Serial.print("/");
-    Serial.print(currentTime.day);
-    Serial.print(" ");
-    Serial.print(currentTime.hour);
-    Serial.print(":");
-    Serial.print(currentTime.minute);
-    Serial.print(":");
-    Serial.println(currentTime.second);
-    
-    return true;
-  } else {
-    Serial.println("Failed to read time from BM8563");
-    return false;
-  }
-}
-
-// 写入时间到BM8563
-bool writeTimeToBM8563(const DateTime& dt) {
-  BM8563_Time rtcTime;
-  
-  // 转换DateTime到BM8563_Time
-  rtcTime.seconds = dt.second;
-  rtcTime.minutes = dt.minute;
-  rtcTime.hours = dt.hour;
-  rtcTime.days = dt.day;
-  rtcTime.weekdays = 0; // 不使用
-  rtcTime.months = dt.month;
-  rtcTime.years = dt.year;
-  
-  if (rtc.setTime(&rtcTime)) {
-    Serial.print("Time written to BM8563: ");
-    Serial.print(2000 + dt.year);
-    Serial.print("/");
-    Serial.print(dt.month);
-    Serial.print("/");
-    Serial.print(dt.day);
-    Serial.print(" ");
-    Serial.print(dt.hour);
-    Serial.print(":");
-    Serial.print(dt.minute);
-    Serial.print(":");
-    Serial.println(dt.second);
-    
-    return true;
-  } else {
-    Serial.println("Failed to write time to BM8563");
-    return false;
-  }
-}
 
 // 设置并进入深度睡眠
 void goToDeepSleep() {
