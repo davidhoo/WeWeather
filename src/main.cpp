@@ -8,6 +8,7 @@
 #include "../lib/WeatherManager/WeatherManager.h"
 #include "../lib/WiFiManager/WiFiManager.h"
 #include "../lib/TimeManager/TimeManager.h"
+#include "../lib/SHT40/SHT40.h"
 #include "../lib/Fonts/Weather_Symbols_Regular9pt7b.h"
 #include "../lib/Fonts/DSEG7Modern_Bold28pt7b.h"
 
@@ -43,6 +44,9 @@ String cityCode = "110108";  // 北京海淀区，可根据需要修改
 // 创建WeatherManager对象实例
 WeatherManager weatherManager(AMAP_API_KEY, cityCode, &rtc, 512);
 
+// 创建SHT40对象实例
+SHT40 sht40(SDA_PIN, SCL_PIN);
+
 // 深度睡眠相关函数声明
 void goToDeepSleep();
 
@@ -53,6 +57,13 @@ void setup() {
   
   // 初始化WeatherManager
   weatherManager.begin();
+  
+  // 初始化SHT40温湿度传感器
+  if (sht40.begin()) {
+    Serial.println("SHT40 initialized successfully");
+  } else {
+    Serial.println("Failed to initialize SHT40");
+  }
   
   // 初始化GDEY029T94墨水屏
   epd.begin();
@@ -103,7 +114,15 @@ void setup() {
   // 获取当前天气信息并显示
   WeatherInfo currentWeather = weatherManager.getCurrentWeather();
   DateTime currentTime = timeManager.getCurrentTime();
-  epd.showTimeDisplay(currentTime, currentWeather);
+  
+  // 读取温湿度数据
+  float temperature = sht40.readTemperature();
+  float humidity = sht40.readHumidity();
+
+  Serial.println("Current Temperature: " + String(temperature) + " °C");
+  Serial.println("Current Humidity: " + String(humidity) + " %RH");
+  
+  epd.showTimeDisplay(currentTime, currentWeather, temperature, humidity);
   
   // 进入深度睡眠
   goToDeepSleep();

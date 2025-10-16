@@ -15,7 +15,7 @@ void GDEY029T94::setRotation(int rotation) {
   display.setRotation(rotation);
 }
 
-void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo& currentWeather) {
+void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo& currentWeather, float temperature, float humidity) {
   String timeStr = TimeManager::getFormattedTime(currentTime);
   String dateStr = TimeManager::getFormattedDate(currentTime);
   String weatherStr = WeatherManager::getWeatherInfo(currentWeather);
@@ -69,7 +69,7 @@ void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo&
     uint16_t tbw, tbh;
     display.getTextBounds(fixedTimeStr, 0, 0, &tbx, &tby, &tbw, &tbh);
     
-    int timeX = alignToPixel8((display.width() - tbw) / 2); // 居中对齐，8像素对齐
+    int timeX = alignToPixel8((display.width() - tbw) / 2 - 30); // 居中对齐，8像素对齐
     int timeY = topLineY + tbh + 10; // 在顶部线下方（减少间距）
     
     display.setCursor(timeX, timeY);
@@ -86,6 +86,68 @@ void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo&
     
     display.setCursor(dateX, dateY);
     display.print(dateStr);
+    
+    // 显示温湿度信息（在日期下方，右对齐）
+    Serial.print("Temperature: ");
+    Serial.print(temperature);
+    Serial.print(", Humidity: ");
+    Serial.println(humidity);
+    
+    if (!isnan(temperature) && !isnan(humidity)) {
+      Serial.println("Displaying temperature and humidity...");
+      display.setFont(&FreeMonoBold9pt7b);
+      
+      // 准备温度和湿度字符串
+      char tempStr[16];
+      char humStr[16];
+      snprintf(tempStr, sizeof(tempStr), "%.0fC", temperature);
+      snprintf(humStr, sizeof(humStr), "%.0f%% ", humidity);
+      
+      Serial.print("Temp string: ");
+      Serial.println(tempStr);
+      Serial.print("Hum string: ");
+      Serial.println(humStr);
+      
+      // 计算温度字符串的宽度和位置（右对齐）
+      int16_t tbx, tby;
+      uint16_t tbw, tbh;
+      display.getTextBounds(tempStr, 0, 0, &tbx, &tby, &tbw, &tbh);
+      int tempX = alignToPixel8(display.width() - tbw - 10); // 右对齐，8像素对齐
+      int tempY = topLineY + 35; // 在线下方40像素处
+      
+      Serial.print("Temp position: X=");
+      Serial.print(tempX);
+      Serial.print(", Y=");
+      Serial.println(tempY);
+      
+      // 计算湿度字符串的宽度和位置（右对齐）
+      int16_t hbx, hby;
+      uint16_t hbw, hbh;
+      display.getTextBounds(humStr, 0, 0, &hbx, &hby, &hbw, &hbh);
+      int humX = alignToPixel8(display.width() - hbw - 10); // 右对齐，8像素对齐
+      int humY = tempY + 20; // 在温度下方20像素处
+      
+      Serial.print("Hum position: X=");
+      Serial.print(humX);
+      Serial.print(", Y=");
+      Serial.println(humY);
+      
+      // 显示温度
+      display.setCursor(tempX, tempY);
+      display.print(tempStr);
+      
+      // 在温度左侧画一条竖线，连接上下两条线
+      int verticalLineX = alignToPixel8(tempX - 10); // 在温度左侧10像素处
+      display.drawLine(verticalLineX, topLineY, verticalLineX, bottomLineY, GxEPD_BLACK);
+      
+      // 显示湿度
+      display.setCursor(humX, humY);
+      display.print(humStr);
+      
+      Serial.println("Temperature and humidity displayed");
+    } else {
+      Serial.println("Temperature or humidity is NaN, not displaying");
+    }
     
   } while (display.nextPage());
   

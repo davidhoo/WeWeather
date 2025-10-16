@@ -22,7 +22,7 @@ public:
   void setRotation(int rotation);
   
   // 显示时间和天气信息
-  void showTimeDisplay(const DateTime& currentTime, const WeatherInfo& currentWeather);
+  void showTimeDisplay(const DateTime& currentTime, const WeatherInfo& currentWeather, float temperature = NAN, float humidity = NAN);
   
   // 设置时间字体
   void setTimeFont(const GFXfont* font);
