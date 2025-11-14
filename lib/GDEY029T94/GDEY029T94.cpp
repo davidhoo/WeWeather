@@ -20,6 +20,32 @@ void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo&
   String dateStr = TimeManager::getFormattedDate(currentTime);
   String weatherStr = WeatherManager::getWeatherInfo(currentWeather);
   
+  // 调试输出移到循环外部，避免重复打印
+  Serial.print("Temperature: ");
+  Serial.print(temperature);
+  Serial.print(", Humidity: ");
+  Serial.println(humidity);
+  
+  if (!isnan(temperature) && !isnan(humidity)) {
+    Serial.println("Displaying temperature and humidity...");
+    
+    // 准备温度和湿度字符串
+    char tempStr[16];
+    char humStr[16];
+    snprintf(tempStr, sizeof(tempStr), "%.0fC", temperature);
+    snprintf(humStr, sizeof(humStr), "%.0f%% ", humidity);
+    
+    Serial.print("Temp string: ");
+    Serial.println(tempStr);
+    Serial.print("Hum string: ");
+    Serial.println(humStr);
+  }
+  
+  if (!isnan(batteryPercentage)) {
+    Serial.print("Battery percentage: ");
+    Serial.println(batteryPercentage);
+  }
+  
   display.setFullWindow();
   display.firstPage();
   do {
@@ -88,13 +114,7 @@ void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo&
     display.print(dateStr);
     
     // 显示温湿度信息（在日期下方，右对齐）
-    Serial.print("Temperature: ");
-    Serial.print(temperature);
-    Serial.print(", Humidity: ");
-    Serial.println(humidity);
-    
     if (!isnan(temperature) && !isnan(humidity)) {
-      Serial.println("Displaying temperature and humidity...");
       display.setFont(&FreeMonoBold9pt7b);
       
       // 准备温度和湿度字符串
@@ -103,11 +123,6 @@ void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo&
       snprintf(tempStr, sizeof(tempStr), "%.0fC", temperature);
       snprintf(humStr, sizeof(humStr), "%.0f%% ", humidity);
       
-      Serial.print("Temp string: ");
-      Serial.println(tempStr);
-      Serial.print("Hum string: ");
-      Serial.println(humStr);
-      
       // 计算温度字符串的宽度和位置（右对齐）
       int16_t tbx, tby;
       uint16_t tbw, tbh;
@@ -115,22 +130,12 @@ void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo&
       int tempX = alignToPixel8(display.width() - tbw - 10); // 右对齐，8像素对齐
       int tempY = topLineY + 35; // 在线下方40像素处
       
-      Serial.print("Temp position: X=");
-      Serial.print(tempX);
-      Serial.print(", Y=");
-      Serial.println(tempY);
-      
       // 计算湿度字符串的宽度和位置（右对齐）
       int16_t hbx, hby;
       uint16_t hbw, hbh;
       display.getTextBounds(humStr, 0, 0, &hbx, &hby, &hbw, &hbh);
       int humX = alignToPixel8(display.width() - hbw - 10); // 右对齐，8像素对齐
       int humY = tempY + 20; // 在温度下方20像素处
-      
-      Serial.print("Hum position: X=");
-      Serial.print(humX);
-      Serial.print(", Y=");
-      Serial.println(humY);
       
       // 显示温度
       display.setCursor(tempX, tempY);
@@ -143,17 +148,10 @@ void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo&
       // 显示湿度
       display.setCursor(humX, humY);
       display.print(humStr);
-      
-      Serial.println("Temperature and humidity displayed");
-    } else {
-      Serial.println("Temperature or humidity is NaN, not displaying");
     }
     
     // 显示电池电量（在右下角，与日期同一行）
     if (!isnan(batteryPercentage)) {
-      Serial.print("Battery percentage: ");
-      Serial.println(batteryPercentage);
-      
       // 计算电池图标位置（右对齐，与日期同一行）
       // 电池总宽度 = 22像素（电池主体）+ 3像素（正极帽）= 25像素
       int totalBatteryWidth = 25;
@@ -161,13 +159,28 @@ void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo&
       int batteryY = dateY; // 与日期相同的Y位置
       
       drawBatteryIcon(batteryX, batteryY, batteryPercentage);
-      
-      Serial.println("Battery icon displayed");
-    } else {
-      Serial.println("Battery percentage is NaN, not displaying");
     }
     
   } while (display.nextPage());
+  
+  // 在循环外部输出完成信息
+  if (!isnan(temperature) && !isnan(humidity)) {
+    Serial.print("Temp position: X=");
+    Serial.print(alignToPixel8(display.width() - 10));
+    Serial.print(", Y=55");
+    Serial.print("Hum position: X=");
+    Serial.print(alignToPixel8(display.width() - 10));
+    Serial.println(", Y=75");
+    Serial.println("Temperature and humidity displayed");
+  } else {
+    Serial.println("Temperature or humidity is NaN, not displaying");
+  }
+  
+  if (!isnan(batteryPercentage)) {
+    Serial.println("Battery icon displayed");
+  } else {
+    Serial.println("Battery percentage is NaN, not displaying");
+  }
   
   display.hibernate();
 }
