@@ -126,7 +126,6 @@ void setup() {
   Serial.println("Current Temperature: " + String(temperature) + " °C");
   Serial.println("Current Humidity: " + String(humidity) + " %RH");
   
-  epd.showTimeDisplay(currentTime, currentWeather, temperature, humidity);
   
   // 初始化并读取电池状态
   battery.begin();
@@ -141,6 +140,8 @@ void setup() {
   Serial.println("电池电量: " + String(batteryPercentage, 1) + " %");
   Serial.println("================");
   
+
+  epd.showTimeDisplay(currentTime, currentWeather, temperature, humidity, batteryPercentage);
   // 进入深度睡眠
   goToDeepSleep();
 }

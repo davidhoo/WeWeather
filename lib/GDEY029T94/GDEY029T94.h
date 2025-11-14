@@ -22,7 +22,7 @@ public:
   void setRotation(int rotation);
   
   // 显示时间和天气信息
-  void showTimeDisplay(const DateTime& currentTime, const WeatherInfo& currentWeather, float temperature = NAN, float humidity = NAN);
+  void showTimeDisplay(const DateTime& currentTime, const WeatherInfo& currentWeather, float temperature = NAN, float humidity = NAN, float batteryPercentage = NAN);
   
   // 设置时间字体
   void setTimeFont(const GFXfont* font);
@@ -34,6 +34,8 @@ public:
   int alignToPixel8(int x);
   
 private:
+  // 绘制电池符号
+  void drawBatteryIcon(int x, int y, float percentage);
   GxEPD2_BW<GxEPD2_290_GDEY029T94, GxEPD2_290_GDEY029T94::WIDTH> display;
   const GFXfont* timeFont;
   const GFXfont* weatherSymbolFont;

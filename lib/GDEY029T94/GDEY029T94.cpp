@@ -15,7 +15,7 @@ void GDEY029T94::setRotation(int rotation) {
   display.setRotation(rotation);
 }
 
-void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo& currentWeather, float temperature, float humidity) {
+void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo& currentWeather, float temperature, float humidity, float batteryPercentage) {
   String timeStr = TimeManager::getFormattedTime(currentTime);
   String dateStr = TimeManager::getFormattedDate(currentTime);
   String weatherStr = WeatherManager::getWeatherInfo(currentWeather);
@@ -149,6 +149,24 @@ void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo&
       Serial.println("Temperature or humidity is NaN, not displaying");
     }
     
+    // 显示电池电量（在右下角，与日期同一行）
+    if (!isnan(batteryPercentage)) {
+      Serial.print("Battery percentage: ");
+      Serial.println(batteryPercentage);
+      
+      // 计算电池图标位置（右对齐，与日期同一行）
+      // 电池总宽度 = 22像素（电池主体）+ 3像素（正极帽）= 25像素
+      int totalBatteryWidth = 25;
+      int batteryX = alignToPixel8(display.width() - totalBatteryWidth); // 右对齐，距离右边缘10像素
+      int batteryY = dateY; // 与日期相同的Y位置
+      
+      drawBatteryIcon(batteryX, batteryY, batteryPercentage);
+      
+      Serial.println("Battery icon displayed");
+    } else {
+      Serial.println("Battery percentage is NaN, not displaying");
+    }
+    
   } while (display.nextPage());
   
   display.hibernate();
@@ -164,5 +182,51 @@ void GDEY029T94::setWeatherSymbolFont(const GFXfont* font) {
 
 int GDEY029T94::alignToPixel8(int x) {
   return (x / 8) * 8;
+}
+
+void GDEY029T94::drawBatteryIcon(int x, int y, float percentage) {
+  // 电池设计参数
+  int barWidth = 2;           // 每格电量用2像素宽
+  int barCount = 10;          // 总共10格
+  int borderThickness = 1;    // 边框厚度
+  int topBottomMargin = 1;    // 上下边距
+  
+  // 计算电池尺寸
+  int batteryWidth = barCount * barWidth + 2 * borderThickness + 2; // 10格*2像素 + 左右边框
+  int batteryHeight = 12;     // 保持高度12像素
+  int capWidth = 3;
+  int capHeight = 6;
+  
+  // 绘制电池正极帽（左边）
+  int capX = x - capWidth;
+  int capY = y - batteryHeight/2 - capHeight/2 + 2;
+  display.fillRect(capX, capY, capWidth, capHeight, GxEPD_BLACK);
+  
+  // 绘制电池外框
+  display.drawRect(x, y - batteryHeight + 2, batteryWidth, batteryHeight, GxEPD_BLACK);
+  
+  // 计算需要填充的格数（0-10格）
+  int filledBars = (int)((percentage / 100.0) * 10 + 0.5); // 四舍五入
+  if (filledBars > 10) filledBars = 10;
+  if (filledBars < 0) filledBars = 0;
+  
+  // 绘制10格电量，每格2像素宽，从右往左排列
+  int barY = y - batteryHeight + 2 + topBottomMargin + 1; // 上边框 + 上边距
+  int barHeight = batteryHeight - 2 * borderThickness - 2 * topBottomMargin; // 减去上下边框和边距
+  
+  // 从右边开始绘制
+  int rightX = x + batteryWidth - borderThickness -1; // 右边界（减去右边框）
+  
+  for (int i = 0; i < barCount; i++) {
+    int barX = rightX - (i + 1) * barWidth; // 从右往左，每格2像素宽
+    
+    if (i < filledBars) {
+      // 有电量的格子（黑色），从右边开始
+      display.fillRect(barX, barY, barWidth, barHeight, GxEPD_BLACK);
+    } else {
+      // 无电量的格子（白色）
+      display.fillRect(barX, barY, barWidth, barHeight, GxEPD_WHITE);
+    }
+  }
 }
 
