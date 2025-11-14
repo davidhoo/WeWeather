@@ -119,12 +119,16 @@ void setup() {
   WeatherInfo currentWeather = weatherManager.getCurrentWeather();
   DateTime currentTime = timeManager.getCurrentTime();
   
-  // 读取温湿度数据
-  float temperature = sht40.readTemperature();
-  float humidity = sht40.readHumidity();
-
-  Serial.println("Current Temperature: " + String(temperature) + " °C");
-  Serial.println("Current Humidity: " + String(humidity) + " %RH");
+  // 读取温湿度数据（一次性读取，避免重复测量）
+  float temperature, humidity;
+  if (sht40.readTemperatureHumidity(temperature, humidity)) {
+    Serial.println("Current Temperature: " + String(temperature) + " °C");
+    Serial.println("Current Humidity: " + String(humidity) + " %RH");
+  } else {
+    Serial.println("Failed to read SHT40 sensor");
+    temperature = NAN;
+    humidity = NAN;
+  }
   
   
   // 初始化并读取电池状态
