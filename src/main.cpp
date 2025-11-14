@@ -9,6 +9,7 @@
 #include "../lib/WiFiManager/WiFiManager.h"
 #include "../lib/TimeManager/TimeManager.h"
 #include "../lib/SHT40/SHT40.h"
+#include "../lib/BatteryMonitor/BatteryMonitor.h"
 #include "../lib/Fonts/Weather_Symbols_Regular9pt7b.h"
 #include "../lib/Fonts/DSEG7Modern_Bold28pt7b.h"
 
@@ -46,6 +47,9 @@ WeatherManager weatherManager(AMAP_API_KEY, cityCode, &rtc, 512);
 
 // 创建SHT40对象实例
 SHT40 sht40(SDA_PIN, SCL_PIN);
+
+// 创建BatteryMonitor对象实例
+BatteryMonitor battery;
 
 // 深度睡眠相关函数声明
 void goToDeepSleep();
@@ -123,6 +127,19 @@ void setup() {
   Serial.println("Current Humidity: " + String(humidity) + " %RH");
   
   epd.showTimeDisplay(currentTime, currentWeather, temperature, humidity);
+  
+  // 初始化并读取电池状态
+  battery.begin();
+  int rawADC = battery.getRawADC();
+  float batteryVoltage = battery.getBatteryVoltage();
+  float batteryPercentage = battery.getBatteryPercentage();
+  
+  // 打印电池状态信息
+  Serial.println("=== 电池状态 ===");
+  Serial.println("原始 ADC 值: " + String(rawADC));
+  Serial.println("电池电压: " + String(batteryVoltage, 2) + " V");
+  Serial.println("电池电量: " + String(batteryPercentage, 1) + " %");
+  Serial.println("================");
   
   // 进入深度睡眠
   goToDeepSleep();

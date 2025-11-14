@@ -1,15 +1,17 @@
 #include "BatteryMonitor.h"
 
 // 构造函数
+// 构造函数
 BatteryMonitor::BatteryMonitor(uint8_t pin) {
     adcPin = pin;
     // ESP8266 ADC 参考电压为 3.3V，ADC 分辨率为 10 位 (0-1023)
-    voltageMultiplier = 3.3 / 1023.0;
+    // 基础电压计算：ADC值 * (3.3V / 1023)
+    // 分压校正：根据实际测量 4.2V -> 2.351V，校正系数为 4.2/2.351 ≈ 1.787
+    voltageMultiplier = (3.3 / 1023.0) * 1.787;
     // 3.7V 锂电池的典型电压范围
     minVoltage = 3.0;  // 电池最低电压
     maxVoltage = 4.2;  // 电池最高电压（充满电）
 }
-
 // 初始化方法
 void BatteryMonitor::begin() {
     // ESP8266 的 A0 引脚不需要特殊初始化
