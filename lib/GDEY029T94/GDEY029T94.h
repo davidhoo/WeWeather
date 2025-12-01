@@ -36,7 +36,7 @@ public:
 private:
   // 绘制电池符号
   void drawBatteryIcon(int x, int y, float percentage);
-  GxEPD2_BW<GxEPD2_290_GDEY029T94, GxEPD2_290_GDEY029T94::WIDTH> display;
+  GxEPD2_BW<GxEPD2_290_GDEY029T94, GxEPD2_290_GDEY029T94::HEIGHT> display;
   const GFXfont* timeFont;
   const GFXfont* weatherSymbolFont;
   
