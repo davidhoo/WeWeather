@@ -11,6 +11,8 @@ struct WiFiConfig {
   unsigned long timeout;
   bool autoReconnect;
   int maxRetries;
+  char macAddress[18];  // MAC地址字符串 (格式: "AA:BB:CC:DD:EE:FF")
+  bool useMacAddress;   // 是否使用自定义MAC地址
 };
 
 class WiFiManager {
@@ -74,6 +76,15 @@ public:
   // 设置最大重试次数
   void setMaxRetries(int retries);
   
+  // 设置MAC地址
+  void setMacAddress(const char* macAddress);
+  
+  // 获取当前MAC地址
+  String getMacAddress();
+  
+  // 启用/禁用自定义MAC地址
+  void enableMacAddress(bool enable);
+  
   // 获取WiFi状态描述
   String getStatusString();
   
@@ -88,6 +99,7 @@ private:
   void _printNetworkInfo(int networkIndex);
   bool _waitForConnection(unsigned long timeout);
   void _copyString(char* dest, const char* src, size_t maxLen);
+  bool _parseMacAddress(const char* macStr, uint8_t* macBytes);
 };
 
 #endif // WIFI_MANAGER_H

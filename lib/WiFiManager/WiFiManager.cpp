@@ -29,6 +29,8 @@ void WiFiManager::setDefaultConfig() {
   _config.timeout = 10000; // 10秒超时
   _config.autoReconnect = true;
   _config.maxRetries = 3;
+  _copyString(_config.macAddress, "14:2B:2F:EC:0B:04", sizeof(_config.macAddress));
+  _config.useMacAddress = true; // 默认启用自定义MAC地址
 }
 
 void WiFiManager::setCredentials(const char* ssid, const char* password) {
@@ -56,6 +58,20 @@ bool WiFiManager::connect(unsigned long timeout) {
   if (strlen(_config.ssid) == 0) {
     Serial.println("WiFi SSID not set. Call setCredentials() first.");
     return false;
+  }
+  
+  // 如果启用了自定义MAC地址，先设置MAC地址
+  if (_config.useMacAddress && strlen(_config.macAddress) > 0) {
+    Serial.println("Setting custom MAC address: " + String(_config.macAddress));
+    
+    // 将MAC地址字符串转换为字节数组
+    uint8_t mac[6];
+    if (_parseMacAddress(_config.macAddress, mac)) {
+      WiFi.macAddress(mac);
+      Serial.println("MAC address set successfully");
+    } else {
+      Serial.println("Invalid MAC address format, using default MAC");
+    }
   }
   
   unsigned long connectTimeout = (timeout == 0) ? _config.timeout : timeout;
@@ -100,6 +116,20 @@ bool WiFiManager::scanAndConnect(unsigned long timeout) {
     // 检查是否为目标SSID
     if (WiFi.SSID(i) == String(_config.ssid)) {
       Serial.println("Found target network: " + String(_config.ssid));
+      
+      // 如果启用了自定义MAC地址，先设置MAC地址
+      if (_config.useMacAddress && strlen(_config.macAddress) > 0) {
+        Serial.println("Setting custom MAC address: " + String(_config.macAddress));
+        
+        // 将MAC地址字符串转换为字节数组
+        uint8_t mac[6];
+        if (_parseMacAddress(_config.macAddress, mac)) {
+          WiFi.macAddress(mac);
+          Serial.println("MAC address set successfully");
+        } else {
+          Serial.println("Invalid MAC address format, using default MAC");
+        }
+      }
       
       // 连接到目标网络
       WiFi.begin(_config.ssid, _config.password);
@@ -198,6 +228,23 @@ void WiFiManager::setMaxRetries(int retries) {
   _config.maxRetries = retries;
 }
 
+void WiFiManager::setMacAddress(const char* macAddress) {
+  _copyString(_config.macAddress, macAddress, sizeof(_config.macAddress));
+  Serial.println("MAC address updated: " + String(_config.macAddress));
+}
+
+String WiFiManager::getMacAddress() {
+  if (_config.useMacAddress && strlen(_config.macAddress) > 0) {
+    return String(_config.macAddress);
+  }
+  return WiFi.macAddress();
+}
+
+void WiFiManager::enableMacAddress(bool enable) {
+  _config.useMacAddress = enable;
+  Serial.println("Custom MAC address " + String(enable ? "enabled" : "disabled"));
+}
+
 String WiFiManager::getStatusString() {
   switch (WiFi.status()) {
     case WL_CONNECTED:
@@ -224,6 +271,8 @@ void WiFiManager::printConfig() {
   Serial.println("Timeout: " + String(_config.timeout) + "ms");
   Serial.println("Auto Reconnect: " + String(_config.autoReconnect ? "Enabled" : "Disabled"));
   Serial.println("Max Retries: " + String(_config.maxRetries));
+  Serial.println("MAC Address: " + String(_config.useMacAddress ? _config.macAddress : "Default"));
+  Serial.println("Use Custom MAC: " + String(_config.useMacAddress ? "Yes" : "No"));
   Serial.println("========================");
 }
 
@@ -268,4 +317,34 @@ bool WiFiManager::_waitForConnection(unsigned long timeout) {
 void WiFiManager::_copyString(char* dest, const char* src, size_t maxLen) {
   strncpy(dest, src, maxLen - 1);
   dest[maxLen - 1] = '\0';
+}
+
+bool WiFiManager::_parseMacAddress(const char* macStr, uint8_t* macBytes) {
+  // 解析MAC地址字符串 (格式: "AA:BB:CC:DD:EE:FF")
+  if (strlen(macStr) != 17) {
+    return false;
+  }
+  
+  for (int i = 0; i < 6; i++) {
+    char hex[3];
+    hex[0] = macStr[i * 3];
+    hex[1] = macStr[i * 3 + 1];
+    hex[2] = '\0';
+    
+    // 检查分隔符
+    if (i < 5 && macStr[i * 3 + 2] != ':') {
+      return false;
+    }
+    
+    // 转换十六进制字符串为字节
+    char* endPtr;
+    long val = strtol(hex, &endPtr, 16);
+    if (*endPtr != '\0' || val < 0 || val > 255) {
+      return false;
+    }
+    
+    macBytes[i] = (uint8_t)val;
+  }
+  
+  return true;
 }
