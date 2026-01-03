@@ -1,5 +1,9 @@
 #include "WiFiManager.h"
 
+extern "C" {
+#include "user_interface.h"
+}
+
 WiFiManager::WiFiManager() {
   _initialized = false;
   setDefaultConfig();
@@ -67,8 +71,11 @@ bool WiFiManager::connect(unsigned long timeout) {
     // 将MAC地址字符串转换为字节数组
     uint8_t mac[6];
     if (_parseMacAddress(_config.macAddress, mac)) {
-      WiFi.macAddress(mac);
-      Serial.println("MAC address set successfully");
+      if (wifi_set_macaddr(STATION_IF, mac)) {
+        Serial.println("MAC address set successfully");
+      } else {
+        Serial.println("Failed to set MAC address");
+      }
     } else {
       Serial.println("Invalid MAC address format, using default MAC");
     }
@@ -124,8 +131,11 @@ bool WiFiManager::scanAndConnect(unsigned long timeout) {
         // 将MAC地址字符串转换为字节数组
         uint8_t mac[6];
         if (_parseMacAddress(_config.macAddress, mac)) {
-          WiFi.macAddress(mac);
-          Serial.println("MAC address set successfully");
+          if (wifi_set_macaddr(STATION_IF, mac)) {
+            Serial.println("MAC address set successfully");
+          } else {
+            Serial.println("Failed to set MAC address");
+          }
         } else {
           Serial.println("Invalid MAC address format, using default MAC");
         }
