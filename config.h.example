@@ -1,0 +1,13 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+// WiFi 默认配置
+#define DEFAULT_WIFI_SSID "Your_WiFi_SSID"
+#define DEFAULT_WIFI_PASSWORD "Your_WiFi_PASSWORD"
+#define DEFAULT_MAC_ADDRESS "AA:BB:CC:DD:EE:FF"
+
+// 高德地图 API 配置
+#define DEFAULT_AMAP_API_KEY "Your_Amap_API_Key"
+#define DEFAULT_CITY_CODE "Your_City_Code"
+
+#endif // CONFIG_H
