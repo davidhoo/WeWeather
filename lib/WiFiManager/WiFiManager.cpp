@@ -908,17 +908,10 @@ bool WiFiManager::smartConnect() {
     saveConfigToEEPROM(); // 保存成功的配置
     return true;
   } else {
-    Serial.println("Smart connect failed");
-    incrementFailureCount();
-    // 不再保存失败计数到EEPROM
-    
-    // 检查是否需要进入配网模式
-    if (shouldEnterConfigMode()) {
-      Serial.println("Entering config mode after failures");
-      return startConfigPortal();
-    }
-    
-    return false;
+    Serial.println("Smart connect failed after " + String(_config.maxRetries) + " attempts");
+    // autoConnect 已经尝试了 maxRetries 次，直接进入配网模式
+    Serial.println("Entering config mode after failures");
+    return startConfigPortal();
   }
 }
 
