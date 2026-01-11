@@ -255,35 +255,85 @@ void GDEY029T94::showConfigPortalInfo(const String& apName, const String& ipAddr
     display.setTextColor(GxEPD_BLACK);
     display.setFont(&FreeMonoBold9pt7b);
     
-    // 标题
-    String title = "WiFi Config";
+    // 标题 - 屏幕顶部
+    String title = "WiFi Configuration";
     int16_t tbx, tby;
     uint16_t tbw, tbh;
     display.getTextBounds(title, 0, 0, &tbx, &tby, &tbw, &tbh);
     int titleX = alignToPixel8((display.width() - tbw) / 2);
-    int titleY = 20;
+    int titleY = 25;
     
     display.setCursor(titleX, titleY);
     display.print(title);
     
-    // 在标题下方画线
-    int lineY = titleY + 5;
-    display.drawLine(alignToPixel8(10), lineY, display.width() - alignToPixel8(10), lineY, GxEPD_BLACK);
+    // 标题下方分割线
+    int topLineY = titleY + 8;
+    display.drawLine(alignToPixel8(8), topLineY, display.width() - alignToPixel8(8), topLineY, GxEPD_BLACK);
     
-    // AP名称（一行显示）
-    int apY = lineY + 18;
-    display.setCursor(alignToPixel8(10), apY);
-    display.print("WiFi: " + apName);
+    // 状态信息
+    int statusY = topLineY + 25;
+    display.setCursor(alignToPixel8(10), statusY);
+    display.print("Status: Config Mode");
     
-    // IP地址（一行显示）
-    int ipY = apY + 18;
-    display.setCursor(alignToPixel8(10), ipY);
+    // AP信息标题
+    int apTitleY = statusY + 30;
+    display.setCursor(alignToPixel8(10), apTitleY);
+    display.print("Access Point:");
+    
+    // AP名称
+    int apNameY = apTitleY + 20;
+    display.setCursor(alignToPixel8(15), apNameY);
+    display.print("Name: " + apName);
+    
+    // IP地址
+    int ipY = apNameY + 20;
+    display.setCursor(alignToPixel8(15), ipY);
     display.print("IP: " + ipAddress);
     
-    // 简化的说明文字（一行）
-    int instrY = ipY + 18;
-    display.setCursor(alignToPixel8(10), instrY);
-    display.print("Connect & browse");
+    // 中间分割线
+    int midLineY = ipY + 15;
+    display.drawLine(alignToPixel8(8), midLineY, display.width() - alignToPixel8(8), midLineY, GxEPD_BLACK);
+    
+    // 操作步骤标题
+    int stepsY = midLineY + 25;
+    display.setCursor(alignToPixel8(10), stepsY);
+    display.print("Setup Steps:");
+    
+    // 步骤1
+    int step1Y = stepsY + 22;
+    display.setCursor(alignToPixel8(15), step1Y);
+    display.print("1. Connect phone to");
+    
+    int step1bY = step1Y + 18;
+    display.setCursor(alignToPixel8(18), step1bY);
+    display.print("above WiFi network");
+    
+    // 步骤2
+    int step2Y = step1bY + 22;
+    display.setCursor(alignToPixel8(15), step2Y);
+    display.print("2. Open browser and");
+    
+    int step2bY = step2Y + 18;
+    display.setCursor(alignToPixel8(18), step2bY);
+    display.print("visit above IP");
+    
+    // 步骤3
+    int step3Y = step2bY + 22;
+    display.setCursor(alignToPixel8(15), step3Y);
+    display.print("3. Enter WiFi info");
+    
+    // 底部分割线
+    int bottomLineY = step3Y + 15;
+    display.drawLine(alignToPixel8(8), bottomLineY, display.width() - alignToPixel8(8), bottomLineY, GxEPD_BLACK);
+    
+    // 底部提示
+    int bottomY = bottomLineY + 20;
+    display.setCursor(alignToPixel8(10), bottomY);
+    display.print("Device will restart");
+    
+    int bottom2Y = bottomY + 18;
+    display.setCursor(alignToPixel8(10), bottom2Y);
+    display.print("after configuration");
     
   } while (display.nextPage());
   
