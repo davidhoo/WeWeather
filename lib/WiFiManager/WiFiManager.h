@@ -16,7 +16,6 @@ struct WiFiConfig {
   int maxRetries;
   char macAddress[18];  // MAC地址字符串 (格式: "AA:BB:CC:DD:EE:FF")
   bool useMacAddress;   // 是否使用自定义MAC地址
-  int failureCount;     // 连接失败计数
   bool configMode;      // 是否处于配网模式
 };
 
@@ -158,6 +157,7 @@ public:
 private:
   WiFiConfig _config;
   bool _initialized;
+  int _failureCount;    // 连接失败计数（不保存到EEPROM）
   
   // 配网模式相关
   ConfigPortalConfig _portalConfig;

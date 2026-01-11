@@ -9,6 +9,7 @@ const uint32_t CONFIG_VERSION = 0x12345678; // 配置版本标识
 
 WiFiManager::WiFiManager() {
   _initialized = false;
+  _failureCount = 0;
   _webServer = nullptr;
   _dnsServer = nullptr;
   _configPortalActive = false;
@@ -40,9 +41,8 @@ void WiFiManager::setDefaultConfig() {
   _copyString(_config.password, "Your_WiFi_Password", sizeof(_config.password));
   _config.timeout = 10000; // 10秒超时
   _config.autoReconnect = true;
-  _config.maxRetries = 3;
+  _config.maxRetries = 10; // 修改为10次重试
   _config.useMacAddress = false; // 默认不使用自定义MAC地址
-  _config.failureCount = 0; // 初始化失败计数
   _config.configMode = false; // 初始化配网模式状态
 }
 
@@ -485,21 +485,22 @@ String WiFiManager::getConfigPortalIP() {
 }
 
 void WiFiManager::resetFailureCount() {
-  _config.failureCount = 0;
+  _failureCount = 0;
   Serial.println("WiFi failure count reset");
 }
 
 int WiFiManager::getFailureCount() {
-  return _config.failureCount;
+  return _failureCount;
 }
 
 void WiFiManager::incrementFailureCount() {
-  _config.failureCount++;
-  Serial.println("WiFi failure count: " + String(_config.failureCount));
+  _failureCount++;
+  Serial.println("WiFi failure count: " + String(_failureCount));
 }
 
 bool WiFiManager::shouldEnterConfigMode() {
-  return _config.failureCount >= 10;
+  // 使用配置中的 maxRetries 作为进入配网模式的阈值
+  return _failureCount >= _config.maxRetries;
 }
 
 String WiFiManager::_generateAPName() {
@@ -624,10 +625,7 @@ void WiFiManager::_handleWiFiSave() {
     _config.useMacAddress = false;
   }
   
-  // 重置失败计数
-  _config.failureCount = 0;
-  
-  // 保存到EEPROM
+  // 保存到EEPROM（不包含失败计数）
   if (saveConfigToEEPROM()) {
     Serial.println("Configuration saved to EEPROM");
     
@@ -692,7 +690,7 @@ String WiFiManager::_getConfigPageHTML() {
   html += String(_config.ssid);
   html += R"(<br>
             失败次数: )";
-  html += String(_config.failureCount);
+  html += String(_failureCount);
   html += R"(
         </div>
         
@@ -813,7 +811,6 @@ bool WiFiManager::loadConfigFromEEPROM() {
   _config = loadedConfig;
   Serial.println("WiFi config loaded from EEPROM");
   Serial.println("Loaded SSID: " + String(_config.ssid));
-  Serial.println("Failure count: " + String(_config.failureCount));
   
   return true;
 }
@@ -868,7 +865,7 @@ bool WiFiManager::_isValidConfig(const WiFiConfig& config) {
     return false;
   }
   
-  if (config.maxRetries < 1 || config.maxRetries > 10) {
+  if (config.maxRetries < 1 || config.maxRetries > 100) {
     return false;
   }
   
@@ -904,7 +901,7 @@ bool WiFiManager::smartConnect() {
   } else {
     Serial.println("Smart connect failed");
     incrementFailureCount();
-    saveConfigToEEPROM(); // 保存失败计数
+    // 不再保存失败计数到EEPROM
     
     // 检查是否需要进入配网模式
     if (shouldEnterConfigMode()) {
