@@ -255,37 +255,37 @@ void GDEY029T94::showConfigPortalInfo(const String& apName, const String& ipAddr
     display.setTextColor(GxEPD_BLACK);
     display.setFont(&FreeMonoBold9pt7b);
     
-    // 标题
+    // 标题 - 从更靠上的位置开始
     String title = "WiFi Configuration";
     int16_t tbx, tby;
     uint16_t tbw, tbh;
     display.getTextBounds(title, 0, 0, &tbx, &tby, &tbw, &tbh);
     int titleX = alignToPixel8((display.width() - tbw) / 2);
-    int titleY = 60;
+    int titleY = 25;
     
     display.setCursor(titleX, titleY);
     display.print(title);
     
-    // 第一条分割线
-    int topLineY = titleY + 15;
+    // 第一条分割线 - 减少间距
+    int topLineY = titleY + 8;
     display.drawLine(alignToPixel8(8), topLineY, display.width() - alignToPixel8(8), topLineY, GxEPD_BLACK);
     
-    // SSID信息
-    int ssidY = topLineY + 35;
+    // SSID信息 - 减少间距
+    int ssidY = topLineY + 25;
     display.setCursor(alignToPixel8(10), ssidY);
     display.print("SSID: " + apName);
     
-    // IP地址信息
-    int ipY = ssidY + 30;
+    // IP地址信息 - 减少间距
+    int ipY = ssidY + 22;
     display.setCursor(alignToPixel8(10), ipY);
     display.print("IP: " + ipAddress);
     
-    // 第二条分割线
-    int bottomLineY = ipY + 15;
+    // 第二条分割线 - 减少间距
+    int bottomLineY = ipY + 8;
     display.drawLine(alignToPixel8(8), bottomLineY, display.width() - alignToPixel8(8), bottomLineY, GxEPD_BLACK);
     
-    // 说明文字
-    int instructionY = bottomLineY + 35;
+    // 说明文字 - 减少间距
+    int instructionY = bottomLineY + 25;
     display.setCursor(alignToPixel8(10), instructionY);
     display.print("Connect WiFi & browse IP");
     
