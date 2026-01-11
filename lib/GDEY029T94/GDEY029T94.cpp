@@ -204,26 +204,20 @@ void GDEY029T94::showWebConfigInfo(const String& ssid, const String& ip) {
     int lineY = titleY + 10;
     display.drawLine(alignToPixel8(10), lineY, display.width() - alignToPixel8(10), lineY, GxEPD_BLACK);
     
-    // SSID 信息
+    // SSID 信息（同一行显示）
     int ssidY = lineY + 30;
     display.setCursor(alignToPixel8(10), ssidY);
-    display.print("SSID:");
-    
-    int ssidValueY = ssidY + 20;
-    display.setCursor(alignToPixel8(20), ssidValueY);
+    display.print("SSID: ");
     display.print(ssid);
     
-    // IP 信息
-    int ipY = ssidValueY + 30;
+    // IP 信息（同一行显示）
+    int ipY = ssidY + 25;
     display.setCursor(alignToPixel8(10), ipY);
-    display.print("IP Address:");
-    
-    int ipValueY = ipY + 20;
-    display.setCursor(alignToPixel8(20), ipValueY);
+    display.print("IP: ");
     display.print(ip);
     
     // 提示信息
-    int hintY = ipValueY + 40;
+    int hintY = ipY + 35;
     display.setCursor(alignToPixel8(10), hintY);
     display.print("Connect to WiFi");
     
