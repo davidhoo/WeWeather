@@ -169,7 +169,6 @@ private:
   // EEPROM配置
   static const int EEPROM_SIZE = 512;
   static const int CONFIG_START_ADDRESS = 0;
-  static const uint32_t CONFIG_VERSION = 0x12345678; // 配置版本标识
   
   // 内部辅助函数
   void _printNetworkInfo(int networkIndex);

@@ -4,6 +4,9 @@ extern "C" {
 #include "user_interface.h"
 }
 
+// 定义静态常量
+const uint32_t CONFIG_VERSION = 0x12345678; // 配置版本标识
+
 WiFiManager::WiFiManager() {
   _initialized = false;
   _webServer = nullptr;
