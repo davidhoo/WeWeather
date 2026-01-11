@@ -256,38 +256,34 @@ void GDEY029T94::showConfigPortalInfo(const String& apName, const String& ipAddr
     display.setFont(&FreeMonoBold9pt7b);
     
     // 标题
-    String title = "WiFi Config Mode";
+    String title = "WiFi Config";
     int16_t tbx, tby;
     uint16_t tbw, tbh;
     display.getTextBounds(title, 0, 0, &tbx, &tby, &tbw, &tbh);
     int titleX = alignToPixel8((display.width() - tbw) / 2);
-    int titleY = 25;
+    int titleY = 20;
     
     display.setCursor(titleX, titleY);
     display.print(title);
     
     // 在标题下方画线
-    int lineY = titleY + 10;
+    int lineY = titleY + 5;
     display.drawLine(alignToPixel8(10), lineY, display.width() - alignToPixel8(10), lineY, GxEPD_BLACK);
     
     // AP名称（一行显示）
-    int apY = lineY + 30;
+    int apY = lineY + 18;
     display.setCursor(alignToPixel8(10), apY);
     display.print("WiFi: " + apName);
     
     // IP地址（一行显示）
-    int ipY = apY + 25;
+    int ipY = apY + 18;
     display.setCursor(alignToPixel8(10), ipY);
     display.print("IP: " + ipAddress);
     
-    // 在IP地址下方画线
-    int bottomLineY = ipY + 15;
-    display.drawLine(alignToPixel8(10), bottomLineY, display.width() - alignToPixel8(10), bottomLineY, GxEPD_BLACK);
-    
     // 简化的说明文字（一行）
-    int instrY = bottomLineY + 25;
+    int instrY = ipY + 18;
     display.setCursor(alignToPixel8(10), instrY);
-    display.print("Connect & browse to IP");
+    display.print("Connect & browse");
     
   } while (display.nextPage());
   
