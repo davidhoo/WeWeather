@@ -15,6 +15,8 @@ void ConfigManager::begin() {
     printConfig();
   } else {
     Serial.println("ConfigManager: 未找到有效配置或配置损坏");
+    // 清零配置，避免显示垃圾数据
+    memset(&_config, 0, sizeof(DeviceConfig));
     _config.isConfigured = false;
   }
 }

@@ -56,9 +56,9 @@ bool ConfigSerial::shouldEnterConfigMode() {
   // 检查启动后 5 秒内是否收到 "config" 命令
   unsigned long startTime = millis();
   
-  Serial.println("等待配置命令... (5秒内发送 'config' 进入配置模式)");
+  Serial.println("等待配置命令... (10秒内发送 'config' 进入配置模式)");
   
-  while (millis() - startTime < 5000) {
+  while (millis() - startTime < 10000) {
     if (Serial.available() > 0) {
       String input = _readLine();
       input.trim();
