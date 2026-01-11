@@ -10,6 +10,8 @@
 #include "../lib/TimeManager/TimeManager.h"
 #include "../lib/SHT40/SHT40.h"
 #include "../lib/BatteryMonitor/BatteryMonitor.h"
+#include "../lib/ConfigManager/ConfigManager.h"
+#include "../lib/SerialConfig/SerialConfig.h"
 #include "../lib/Fonts/Weather_Symbols_Regular9pt7b.h"
 #include "../lib/Fonts/DSEG7Modern_Bold28pt7b.h"
 
@@ -35,15 +37,25 @@ TimeManager timeManager(&rtc);
 // 创建GDEY029T94对象实例
 GDEY029T94 epd(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
 
+// 创建 ConfigManager 对象实例
+ConfigManager configManager;
+
+// 创建 ConfigSerial 对象实例
+ConfigSerial serialConfig(&configManager);
+
 // 创建WiFiManager对象实例
 WiFiManager wifiManager;
 
-// 高德地图API配置
-const char* AMAP_API_KEY = "b4bed4011e9375d01423a45fba58e836";
-String cityCode = "110108";  // 北京海淀区，可根据需要修改
+// 高德地图API配置（默认值，可被 EEPROM 配置覆盖）
+const char* DEFAULT_AMAP_API_KEY = "b4bed4011e9375d01423a45fba58e836";
+String DEFAULT_CITY_CODE = "110108";  // 北京海淀区
 
-// 创建WeatherManager对象实例
-WeatherManager weatherManager(AMAP_API_KEY, cityCode, &rtc, 512);
+// 实际使用的配置（将从 EEPROM 或默认值加载）
+String AMAP_API_KEY;
+String cityCode;
+
+// 创建WeatherManager对象实例（稍后初始化）
+WeatherManager* weatherManager = nullptr;
 
 // 创建SHT40对象实例
 SHT40 sht40(SDA_PIN, SCL_PIN);
@@ -56,11 +68,67 @@ void goToDeepSleep();
 
 void setup() {
   Serial.begin(74880);
+  delay(100);
   
-  Serial.println("System starting up...");
+  Serial.println("\n\n=================================");
+  Serial.println("    WeWeather 系统启动中...");
+  Serial.println("=================================\n");
   
-  // 初始化WeatherManager
-  weatherManager.begin();
+  // 初始化 ConfigManager
+  configManager.begin();
+  
+  // 初始化 ConfigSerial
+  serialConfig.begin(74880);
+  
+  // 检查是否需要进入配置模式
+  if (serialConfig.shouldEnterConfigMode()) {
+    Serial.println("\n进入配置模式...");
+    serialConfig.enterConfigMode(60000); // 60秒超时
+    Serial.println("配置模式结束，继续启动...\n");
+  }
+  
+  // 加载配置
+  DeviceConfig config;
+  bool hasConfig = configManager.loadConfig(config);
+  
+  // 设置 WiFi 配置
+  if (hasConfig && strlen(config.ssid) > 0) {
+    Serial.println("使用 EEPROM 中的 WiFi 配置");
+    WiFiConfig wifiConfig;
+    strncpy(wifiConfig.ssid, config.ssid, sizeof(wifiConfig.ssid));
+    strncpy(wifiConfig.password, config.password, sizeof(wifiConfig.password));
+    
+    if (strlen(config.macAddress) > 0) {
+      strncpy(wifiConfig.macAddress, config.macAddress, sizeof(wifiConfig.macAddress));
+      wifiConfig.useMacAddress = true;
+    } else {
+      wifiConfig.useMacAddress = false;
+    }
+    
+    wifiConfig.timeout = 10000;
+    wifiConfig.autoReconnect = true;
+    wifiConfig.maxRetries = 3;
+    
+    wifiManager.begin(wifiConfig);
+  } else {
+    Serial.println("使用默认 WiFi 配置");
+    wifiManager.begin();
+  }
+  
+  // 设置高德地图 API 配置
+  if (hasConfig && strlen(config.amapApiKey) > 0) {
+    Serial.println("使用 EEPROM 中的高德地图配置");
+    AMAP_API_KEY = String(config.amapApiKey);
+    cityCode = String(config.cityCode);
+  } else {
+    Serial.println("使用默认高德地图配置");
+    AMAP_API_KEY = DEFAULT_AMAP_API_KEY;
+    cityCode = DEFAULT_CITY_CODE;
+  }
+  
+  // 初始化 WeatherManager
+  weatherManager = new WeatherManager(AMAP_API_KEY.c_str(), cityCode, &rtc, 512);
+  weatherManager->begin();
   
   // 初始化SHT40温湿度传感器
   if (sht40.begin()) {
@@ -96,27 +164,24 @@ void setup() {
   timeManager.begin();
   
   // 判断是否需要从网络更新天气
-  if (weatherManager.shouldUpdateFromNetwork()) {
-    Serial.println("Weather data is outdated, updating from network...");
-    
-    // 初始化WiFi连接（使用默认配置）
-    wifiManager.begin();
+  if (weatherManager->shouldUpdateFromNetwork()) {
+    Serial.println("天气数据已过期，从网络更新...");
     
     // 如果WiFi连接成功，更新NTP时间和天气信息
     if (wifiManager.autoConnect()) {
       timeManager.setWiFiConnected(true);
       timeManager.updateNTPTime();
-      weatherManager.updateWeather(true);
+      weatherManager->updateWeather(true);
     } else {
-      Serial.println("WiFi connection failed, using cached data");
+      Serial.println("WiFi 连接失败，使用缓存数据");
       timeManager.setWiFiConnected(false);
     }
   } else {
-    Serial.println("Weather data is recent, using cached data");
+    Serial.println("天气数据较新，使用缓存数据");
   }
   
   // 获取当前天气信息并显示
-  WeatherInfo currentWeather = weatherManager.getCurrentWeather();
+  WeatherInfo currentWeather = weatherManager->getCurrentWeather();
   DateTime currentTime = timeManager.getCurrentTime();
   
   // 读取温湿度数据（一次性读取，避免重复测量）
