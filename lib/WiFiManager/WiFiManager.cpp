@@ -809,8 +809,17 @@ bool WiFiManager::loadConfigFromEEPROM() {
   }
   
   _config = loadedConfig;
+  
+  // 确保 maxRetries 至少为 10（兼容旧配置）
+  if (_config.maxRetries < 10) {
+    Serial.println("Upgrading maxRetries from " + String(_config.maxRetries) + " to 10");
+    _config.maxRetries = 10;
+    saveConfigToEEPROM(); // 保存更新后的配置
+  }
+  
   Serial.println("WiFi config loaded from EEPROM");
   Serial.println("Loaded SSID: " + String(_config.ssid));
+  Serial.println("Max Retries: " + String(_config.maxRetries));
   
   return true;
 }
