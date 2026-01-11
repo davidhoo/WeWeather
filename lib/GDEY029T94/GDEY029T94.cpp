@@ -200,12 +200,12 @@ void GDEY029T94::showWebConfigInfo(const String& ssid, const String& ip) {
     display.setCursor(alignToPixel8(10), titleY);
     display.print("Web Config Mode");
     
-    // 分隔线
-    int lineY = titleY + 10;
-    display.drawLine(alignToPixel8(10), lineY, display.width() - alignToPixel8(10), lineY, GxEPD_BLACK);
+    // 上分隔线
+    int topLineY = titleY + 10;
+    display.drawLine(alignToPixel8(10), topLineY, display.width() - alignToPixel8(10), topLineY, GxEPD_BLACK);
     
     // SSID 信息（同一行显示）
-    int ssidY = lineY + 30;
+    int ssidY = topLineY + 30;
     display.setCursor(alignToPixel8(10), ssidY);
     display.print("SSID: ");
     display.print(ssid);
@@ -216,11 +216,18 @@ void GDEY029T94::showWebConfigInfo(const String& ssid, const String& ip) {
     display.print("IP: ");
     display.print(ip);
     
-    // 访问提示（简化为一行）
-    int urlY = ipY + 35;
-    display.setCursor(alignToPixel8(10), urlY);
-    display.print("Visit: http://");
-    display.print(ip);
+    // 下分隔线
+    int bottomLineY = ipY + 15;
+    display.drawLine(alignToPixel8(10), bottomLineY, display.width() - alignToPixel8(10), bottomLineY, GxEPD_BLACK);
+    
+    // 访问提示
+    int hintY = bottomLineY + 25;
+    display.setCursor(alignToPixel8(10), hintY);
+    display.print("Connect WiFi &");
+    
+    int hint2Y = hintY + 20;
+    display.setCursor(alignToPixel8(10), hint2Y);
+    display.print("browse IP");
     
   } while (display.nextPage());
   
