@@ -142,6 +142,11 @@ bool WiFiManager::scanAndConnect(unsigned long timeout) {
       }
       Serial.println("-------------------------");
       
+      // 先断开之前的连接
+      Serial.println("Disconnecting previous connection...");
+      WiFi.disconnect();
+      delay(100);
+      
       // 如果启用了自定义MAC地址，先设置MAC地址
       if (_config.useMacAddress && strlen(_config.macAddress) > 0) {
         Serial.println("Setting custom MAC address: " + String(_config.macAddress));
@@ -160,7 +165,13 @@ bool WiFiManager::scanAndConnect(unsigned long timeout) {
       }
       
       // 连接到目标网络
+      Serial.println("Calling WiFi.begin()...");
+      Serial.println("  SSID: " + String(_config.ssid));
+      Serial.println("  Password length: " + String(strlen(_config.password)));
+      Serial.println("  MAC: " + WiFi.macAddress());
       WiFi.begin(_config.ssid, _config.password);
+      delay(100);
+      Serial.println("WiFi.begin() called, initial status: " + getStatusString());
       
       Serial.println("Connecting to WiFi...");
       return _waitForConnection(connectTimeout);
