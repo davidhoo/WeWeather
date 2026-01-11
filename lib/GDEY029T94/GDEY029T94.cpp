@@ -216,18 +216,10 @@ void GDEY029T94::showWebConfigInfo(const String& ssid, const String& ip) {
     display.print("IP: ");
     display.print(ip);
     
-    // 提示信息
-    int hintY = ipY + 35;
-    display.setCursor(alignToPixel8(10), hintY);
-    display.print("Connect to WiFi");
-    
-    int hint2Y = hintY + 20;
-    display.setCursor(alignToPixel8(10), hint2Y);
-    display.print("and visit:");
-    
-    int urlY = hint2Y + 20;
+    // 访问提示（简化为一行）
+    int urlY = ipY + 35;
     display.setCursor(alignToPixel8(10), urlY);
-    display.print("http://");
+    display.print("Visit: http://");
     display.print(ip);
     
   } while (display.nextPage());
