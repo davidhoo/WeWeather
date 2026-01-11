@@ -316,12 +316,34 @@ void WiFiManager::_printNetworkInfo(int networkIndex) {
 
 bool WiFiManager::_waitForConnection(unsigned long timeout) {
   unsigned long startAttemptTime = millis();
+  wl_status_t lastStatus = WiFi.status();
+  int dotCount = 0;
+  
+  Serial.println("Waiting for connection (timeout: " + String(timeout) + "ms)...");
   
   // 等待连接结果
   while (WiFi.status() != WL_CONNECTED &&
          millis() - startAttemptTime < timeout) {
+    
+    wl_status_t currentStatus = WiFi.status();
+    
+    // 如果状态发生变化，打印详细信息
+    if (currentStatus != lastStatus) {
+      Serial.println("");
+      Serial.println("Status changed: " + getStatusString() + " (code: " + String(currentStatus) + ")");
+      lastStatus = currentStatus;
+      dotCount = 0;
+    }
+    
     delay(100);
     Serial.print(".");
+    dotCount++;
+    
+    // 每50个点换行
+    if (dotCount >= 50) {
+      Serial.println("");
+      dotCount = 0;
+    }
   }
   
   // 检查连接结果
@@ -336,8 +358,13 @@ bool WiFiManager::_waitForConnection(unsigned long timeout) {
     return true;
   } else {
     Serial.println("");
-    Serial.println("Failed to connect to WiFi");
-    Serial.println("Status: " + getStatusString());
+    Serial.println("=== Connection Failed ===");
+    Serial.println("Final Status: " + getStatusString() + " (code: " + String(WiFi.status()) + ")");
+    Serial.println("Time elapsed: " + String(millis() - startAttemptTime) + "ms");
+    Serial.println("SSID: " + String(_config.ssid));
+    Serial.println("BSSID: " + WiFi.BSSIDstr());
+    Serial.println("Channel: " + String(WiFi.channel()));
+    Serial.println("========================");
     return false;
   }
 }
