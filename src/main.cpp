@@ -13,11 +13,15 @@
 #include "../lib/BatteryMonitor/BatteryMonitor.h"
 #include "../lib/ConfigManager/ConfigManager.h"
 #include "../lib/SerialConfig/SerialConfig.h"
+#include "../lib/WebConfig/WebConfig.h"
 #include "../lib/Fonts/Weather_Symbols_Regular9pt7b.h"
 #include "../lib/Fonts/DSEG7Modern_Bold28pt7b.h"
 
 // 深度睡眠相关定义
 #define DEEP_SLEEP_DURATION 60  // 1分钟深度睡眠（单位：秒）
+
+// RXD 引脚定义（用于检测 Web 配置模式）
+#define RXD_PIN 3  // GPIO-3 (RXD)
 
 // I2C引脚定义 (根据用户提供的连接)
 #define SDA_PIN 2  // GPIO-2 (D4)
@@ -43,6 +47,9 @@ ConfigManager configManager;
 
 // 创建 ConfigSerial 对象实例
 ConfigSerial serialConfig(&configManager);
+
+// 创建 WebConfig 对象实例
+WebConfig webConfig(&configManager);
 
 // 创建WiFiManager对象实例
 WiFiManager wifiManager;
@@ -82,6 +89,47 @@ void setup() {
     Serial.println("RTC 定时器和中断已禁用");
   } else {
     Serial.println("警告: RTC 初始化失败");
+  }
+  
+  // 检查 RXD 引脚状态，判断是否进入 Web 配置模式
+  pinMode(RXD_PIN, INPUT_PULLUP);
+  delay(100); // 等待引脚稳定
+  
+  bool enterWebConfig = (digitalRead(RXD_PIN) == LOW);
+  
+  if (enterWebConfig) {
+    Serial.println("\n=================================");
+    Serial.println("  检测到 RXD 被拉低");
+    Serial.println("  进入 Web 配置模式");
+    Serial.println("=================================\n");
+    
+    // 初始化 ConfigManager
+    configManager.begin();
+    
+    // 初始化墨水屏
+    epd.begin();
+    epd.setRotation(1);
+    
+    // 启动 Web 配置模式（AP SSID: weweather）
+    webConfig.begin("weweather", "");
+    
+    // 在屏幕上显示 SSID 和 IP
+    String apSSID = webConfig.getAPSSID();
+    String apIP = webConfig.getAPIP();
+    epd.showWebConfigInfo(apSSID, apIP);
+    
+    // 进入配置模式（5分钟超时）
+    bool configured = webConfig.enterConfigMode(300000);
+    
+    if (configured) {
+      Serial.println("\n配置完成，准备重启...");
+      delay(2000);
+      ESP.restart();
+    } else {
+      Serial.println("\n配置超时，退出配置模式");
+      webConfig.stop();
+      // 继续正常启动流程
+    }
   }
   
   // 初始化 ConfigManager

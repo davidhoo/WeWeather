@@ -185,6 +185,63 @@ void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo&
   display.hibernate();
 }
 
+void GDEY029T94::showWebConfigInfo(const String& ssid, const String& ip) {
+  Serial.println("显示 Web 配置信息到屏幕...");
+  
+  display.setFullWindow();
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    display.setTextColor(GxEPD_BLACK);
+    display.setFont(&FreeMonoBold9pt7b);
+    
+    // 标题
+    int titleY = 20;
+    display.setCursor(alignToPixel8(10), titleY);
+    display.print("Web Config Mode");
+    
+    // 分隔线
+    int lineY = titleY + 10;
+    display.drawLine(alignToPixel8(10), lineY, display.width() - alignToPixel8(10), lineY, GxEPD_BLACK);
+    
+    // SSID 信息
+    int ssidY = lineY + 30;
+    display.setCursor(alignToPixel8(10), ssidY);
+    display.print("SSID:");
+    
+    int ssidValueY = ssidY + 20;
+    display.setCursor(alignToPixel8(20), ssidValueY);
+    display.print(ssid);
+    
+    // IP 信息
+    int ipY = ssidValueY + 30;
+    display.setCursor(alignToPixel8(10), ipY);
+    display.print("IP Address:");
+    
+    int ipValueY = ipY + 20;
+    display.setCursor(alignToPixel8(20), ipValueY);
+    display.print(ip);
+    
+    // 提示信息
+    int hintY = ipValueY + 40;
+    display.setCursor(alignToPixel8(10), hintY);
+    display.print("Connect to WiFi");
+    
+    int hint2Y = hintY + 20;
+    display.setCursor(alignToPixel8(10), hint2Y);
+    display.print("and visit:");
+    
+    int urlY = hint2Y + 20;
+    display.setCursor(alignToPixel8(10), urlY);
+    display.print("http://");
+    display.print(ip);
+    
+  } while (display.nextPage());
+  
+  Serial.println("Web 配置信息已显示到屏幕");
+  display.hibernate();
+}
+
 void GDEY029T94::setTimeFont(const GFXfont* font) {
   timeFont = font;
 }
