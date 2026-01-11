@@ -104,6 +104,18 @@ void setup() {
   if (wifiConnected && !wifiManager.isConfigMode()) {
     // WiFi连接成功，正常模式
     Serial.println("WiFi connected successfully");
+    
+    // 打印网络信息
+    Serial.println("=== Network Information ===");
+    Serial.println("SSID: " + WiFi.SSID());
+    Serial.println("IP Address: " + WiFi.localIP().toString());
+    Serial.println("MAC Address: " + WiFi.macAddress());
+    Serial.println("Gateway: " + WiFi.gatewayIP().toString());
+    Serial.println("Subnet Mask: " + WiFi.subnetMask().toString());
+    Serial.println("DNS Server: " + WiFi.dnsIP().toString());
+    Serial.println("Signal Strength (RSSI): " + String(WiFi.RSSI()) + " dBm");
+    Serial.println("===========================");
+    
     timeManager.setWiFiConnected(true);
     
     // 判断是否需要从网络更新天气
