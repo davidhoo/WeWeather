@@ -3,6 +3,7 @@
 #include <time.h>
 #include <Wire.h>
 #include <ESP8266mDNS.h>
+#include "../config.h"
 #include "../lib/BM8563/BM8563.h"
 #include "../lib/GDEY029T94/GDEY029T94.h"
 #include "../lib/WeatherManager/WeatherManager.h"
@@ -46,14 +47,9 @@ ConfigSerial serialConfig(&configManager);
 // 创建WiFiManager对象实例
 WiFiManager wifiManager;
 
-// 高德地图API配置（默认值，可被 EEPROM 配置覆盖）
-const char* DEFAULT_AMAP_API_KEY = "b4bed4011e9375d01423a45fba58e836";
-String DEFAULT_CITY_CODE = "110108";  // 北京海淀区
-
-// 实际使用的配置（将从 EEPROM 或默认值加载）
+// 实际使用的配置（将从 EEPROM 或 config.h 默认值加载）
 String AMAP_API_KEY;
 String cityCode;
-
 // 创建WeatherManager对象实例（稍后初始化）
 WeatherManager* weatherManager = nullptr;
 
@@ -74,6 +70,20 @@ void setup() {
   Serial.println("    WeWeather 系统启动中...");
   Serial.println("=================================\n");
   
+  // 立即初始化 RTC 并禁用定时器，防止从深度睡眠唤醒后被定时器重启
+  Serial.println("初始化 RTC...");
+  if (rtc.begin()) {
+    Serial.println("RTC 初始化成功");
+    // 立即禁用所有中断和定时器
+    rtc.enableTimerInterrupt(false);
+    rtc.enableAlarmInterrupt(false);
+    rtc.clearTimerFlag();
+    rtc.clearAlarmFlag();
+    Serial.println("RTC 定时器和中断已禁用");
+  } else {
+    Serial.println("警告: RTC 初始化失败");
+  }
+  
   // 初始化 ConfigManager
   configManager.begin();
   
@@ -82,9 +92,15 @@ void setup() {
   
   // 检查是否需要进入配置模式
   if (serialConfig.shouldEnterConfigMode()) {
-    Serial.println("\n进入配置模式...");
+    Serial.println("\n进入配置模式（RTC 定时器已禁用，可以安全配置）...");
+    
     serialConfig.enterConfigMode(60000); // 60秒超时
-    Serial.println("配置模式结束，继续启动...\n");
+    Serial.println("配置模式结束，等待 EEPROM 写入完成...");
+    
+    // 确保 EEPROM 写入完全完成
+    delay(500);
+    
+    Serial.println("继续启动...\n");
   }
   
   // 加载配置
@@ -121,7 +137,7 @@ void setup() {
     AMAP_API_KEY = String(config.amapApiKey);
     cityCode = String(config.cityCode);
   } else {
-    Serial.println("使用默认高德地图配置");
+    Serial.println("使用默认高德地图配置（从 config.h 读取）");
     AMAP_API_KEY = DEFAULT_AMAP_API_KEY;
     cityCode = DEFAULT_CITY_CODE;
   }
@@ -143,26 +159,9 @@ void setup() {
   epd.setTimeFont(&DSEG7Modern_Bold28pt7b);
   epd.setWeatherSymbolFont(&Weather_Symbols_Regular9pt7b);
   
-  // 初始化BM8563 RTC
-  if (rtc.begin()) {
-    Serial.println("BM8563 RTC initialized successfully");
-    
-    // 清除RTC中断标志
-    rtc.clearTimerFlag();
-    rtc.clearAlarmFlag();
-    Serial.println("RTC interrupt flags cleared");
-    
-    // 确保中断被禁用，防止INT持续拉低
-    rtc.enableTimerInterrupt(false);
-    rtc.enableAlarmInterrupt(false);
-    Serial.println("RTC interrupts disabled");
-  } else {
-    Serial.println("Failed to initialize BM8563 RTC");
-  }
-  
+  // RTC 已在 setup() 开始时初始化，这里只需初始化 TimeManager
   // 初始化TimeManager并从RTC读取时间
   timeManager.begin();
-  
   // 判断是否需要从网络更新天气
   if (weatherManager->shouldUpdateFromNetwork()) {
     Serial.println("天气数据已过期，从网络更新...");

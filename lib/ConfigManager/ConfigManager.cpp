@@ -36,15 +36,34 @@ bool ConfigManager::saveConfig(const DeviceConfig& config) {
   EEPROM.put(EEPROM_START_ADDR, tempConfig);
   bool success = EEPROM.commit();
   
-  if (success) {
-    _config = tempConfig;
-    Serial.println("ConfigManager: 配置已保存到 EEPROM");
-    printConfig();
-  } else {
-    Serial.println("ConfigManager: 保存配置失败");
+  if (!success) {
+    Serial.println("ConfigManager: EEPROM.commit() 失败");
+    return false;
   }
   
-  return success;
+  // 等待 EEPROM 写入完成
+  delay(100);
+  
+  // 验证写入：从 EEPROM 读取并比较
+  DeviceConfig verifyConfig;
+  EEPROM.get(EEPROM_START_ADDR, verifyConfig);
+  
+  // 验证关键字段
+  bool verified = (verifyConfig.isConfigured == tempConfig.isConfigured) &&
+                  (verifyConfig.checksum == tempConfig.checksum) &&
+                  (strcmp(verifyConfig.ssid, tempConfig.ssid) == 0);
+  
+  if (verified) {
+    _config = tempConfig;
+    Serial.println("ConfigManager: 配置已保存到 EEPROM 并验证成功");
+    printConfig();
+    return true;
+  } else {
+    Serial.println("ConfigManager: 配置保存验证失败");
+    Serial.println("期望校验和: 0x" + String(tempConfig.checksum, HEX) +
+                   ", 实际: 0x" + String(verifyConfig.checksum, HEX));
+    return false;
+  }
 }
 
 bool ConfigManager::loadConfig(DeviceConfig& config) {

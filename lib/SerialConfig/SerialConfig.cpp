@@ -232,10 +232,24 @@ void ConfigSerial::_handleSetCityCode(const String& value) {
 void ConfigSerial::_handleSaveConfig() {
   DeviceConfig config = _configManager->getConfig();
   
+  Serial.println("正在保存配置到 EEPROM...");
+  
   if (_configManager->saveConfig(config)) {
     Serial.println("✓ 配置已成功保存到 EEPROM");
+    
+    // 额外延迟确保写入完成
+    delay(200);
+    
+    // 再次验证配置
+    DeviceConfig verifyConfig;
+    if (_configManager->loadConfig(verifyConfig)) {
+      Serial.println("✓ 配置验证成功，数据已持久化");
+    } else {
+      Serial.println("⚠ 警告: 配置验证失败，请重新保存");
+    }
   } else {
     Serial.println("✗ 保存配置失败");
+    Serial.println("提示: 请检查配置是否完整，然后重试");
   }
 }
 
