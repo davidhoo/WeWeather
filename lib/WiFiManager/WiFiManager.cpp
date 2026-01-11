@@ -4,9 +4,17 @@ extern "C" {
 #include "user_interface.h"
 }
 
+// 定义静态常量
+const uint32_t CONFIG_VERSION = 0x12345678; // 配置版本标识
+
 WiFiManager::WiFiManager() {
   _initialized = false;
+  _webServer = nullptr;
+  _dnsServer = nullptr;
+  _configPortalActive = false;
+  _configPortalStartTime = 0;
   setDefaultConfig();
+  _setDefaultPortalConfig();
 }
 
 void WiFiManager::begin() {
@@ -28,13 +36,14 @@ void WiFiManager::begin(const WiFiConfig& config) {
 
 void WiFiManager::setDefaultConfig() {
   // 设置默认的 WiFi 配置
-  _copyString(_config.ssid, "Sina Plaza Office", sizeof(_config.ssid));
-  _copyString(_config.password, "urtheone", sizeof(_config.password));
+  _copyString(_config.ssid, "Your_WiFi_SSID", sizeof(_config.ssid));
+  _copyString(_config.password, "Your_WiFi_Password", sizeof(_config.password));
   _config.timeout = 10000; // 10秒超时
   _config.autoReconnect = true;
   _config.maxRetries = 3;
-  _copyString(_config.macAddress, "14:2B:2F:EC:0B:04", sizeof(_config.macAddress));
-  _config.useMacAddress = true; // 默认启用自定义MAC地址
+  _config.useMacAddress = false; // 默认不使用自定义MAC地址
+  _config.failureCount = 0; // 初始化失败计数
+  _config.configMode = false; // 初始化配网模式状态
 }
 
 void WiFiManager::setCredentials(const char* ssid, const char* password) {
@@ -357,4 +366,588 @@ bool WiFiManager::_parseMacAddress(const char* macStr, uint8_t* macBytes) {
   }
   
   return true;
+}
+
+// === 配网模式相关方法实现 ===
+
+void WiFiManager::_setDefaultPortalConfig() {
+  _copyString(_portalConfig.apName, "", sizeof(_portalConfig.apName)); // 将在运行时生成
+  _copyString(_portalConfig.apPassword, "", sizeof(_portalConfig.apPassword)); // 无密码
+  _portalConfig.apIP = IPAddress(192, 168, 4, 1);
+  _portalConfig.gateway = IPAddress(192, 168, 4, 1);
+  _portalConfig.subnet = IPAddress(255, 255, 255, 0);
+  _portalConfig.webServerPort = 80;
+  _portalConfig.timeout = 300000; // 5分钟超时
+}
+
+bool WiFiManager::startConfigPortal() {
+  String apName = _generateAPName();
+  return startConfigPortal(apName.c_str());
+}
+
+bool WiFiManager::startConfigPortal(const char* apName) {
+  _copyString(_portalConfig.apName, apName, sizeof(_portalConfig.apName));
+  return startConfigPortal(_portalConfig);
+}
+
+bool WiFiManager::startConfigPortal(const ConfigPortalConfig& config) {
+  if (_configPortalActive) {
+    Serial.println("Config portal already active");
+    return true;
+  }
+  
+  _portalConfig = config;
+  
+  // 如果AP名称为空，生成一个
+  if (strlen(_portalConfig.apName) == 0) {
+    String apName = _generateAPName();
+    _copyString(_portalConfig.apName, apName.c_str(), sizeof(_portalConfig.apName));
+  }
+  
+  Serial.println("Starting config portal...");
+  Serial.println("AP Name: " + String(_portalConfig.apName));
+  Serial.println("AP IP: " + _portalConfig.apIP.toString());
+  
+  _setupConfigPortal();
+  
+  _configPortalActive = true;
+  _configPortalStartTime = millis();
+  _config.configMode = true;
+  
+  Serial.println("Config portal started successfully");
+  Serial.println("Connect to WiFi: " + String(_portalConfig.apName));
+  Serial.println("Open browser to: http://" + _portalConfig.apIP.toString());
+  
+  return true;
+}
+
+void WiFiManager::stopConfigPortal() {
+  if (!_configPortalActive) {
+    return;
+  }
+  
+  Serial.println("Stopping config portal...");
+  
+  if (_webServer) {
+    _webServer->stop();
+    delete _webServer;
+    _webServer = nullptr;
+  }
+  
+  if (_dnsServer) {
+    _dnsServer->stop();
+    delete _dnsServer;
+    _dnsServer = nullptr;
+  }
+  
+  WiFi.softAPdisconnect(true);
+  WiFi.mode(WIFI_STA);
+  
+  _configPortalActive = false;
+  _config.configMode = false;
+  
+  Serial.println("Config portal stopped");
+}
+
+bool WiFiManager::isConfigMode() {
+  return _configPortalActive;
+}
+
+void WiFiManager::handleConfigPortal() {
+  if (!_configPortalActive) {
+    return;
+  }
+  
+  // 检查超时
+  if (_portalConfig.timeout > 0 &&
+      millis() - _configPortalStartTime > _portalConfig.timeout) {
+    Serial.println("Config portal timeout");
+    stopConfigPortal();
+    return;
+  }
+  
+  // 处理DNS和Web服务器请求
+  if (_dnsServer) {
+    _dnsServer->processNextRequest();
+  }
+  
+  if (_webServer) {
+    _webServer->handleClient();
+  }
+}
+
+String WiFiManager::getConfigPortalSSID() {
+  return String(_portalConfig.apName);
+}
+
+String WiFiManager::getConfigPortalIP() {
+  return _portalConfig.apIP.toString();
+}
+
+void WiFiManager::resetFailureCount() {
+  _config.failureCount = 0;
+  Serial.println("WiFi failure count reset");
+}
+
+int WiFiManager::getFailureCount() {
+  return _config.failureCount;
+}
+
+void WiFiManager::incrementFailureCount() {
+  _config.failureCount++;
+  Serial.println("WiFi failure count: " + String(_config.failureCount));
+}
+
+bool WiFiManager::shouldEnterConfigMode() {
+  return _config.failureCount >= 10;
+}
+
+String WiFiManager::_generateAPName() {
+  // 生成随机三位数字
+  randomSeed(ESP.getCycleCount());
+  int randomNum = random(100, 1000);
+  return "WeWeather_" + String(randomNum);
+}
+
+void WiFiManager::_setupConfigPortal() {
+  // 设置AP模式
+  WiFi.mode(WIFI_AP_STA);
+  
+  // 配置AP
+  WiFi.softAPConfig(_portalConfig.apIP, _portalConfig.gateway, _portalConfig.subnet);
+  
+  // 启动AP
+  bool apStarted;
+  if (strlen(_portalConfig.apPassword) > 0) {
+    apStarted = WiFi.softAP(_portalConfig.apName, _portalConfig.apPassword);
+  } else {
+    apStarted = WiFi.softAP(_portalConfig.apName);
+  }
+  
+  if (!apStarted) {
+    Serial.println("Failed to start AP");
+    return;
+  }
+  
+  delay(500); // 等待AP启动
+  
+  // 设置DNS服务器和Web服务器
+  _setupDNSServer();
+  _setupWebServer();
+}
+
+void WiFiManager::_setupDNSServer() {
+  if (_dnsServer) {
+    delete _dnsServer;
+  }
+  
+  _dnsServer = new DNSServer();
+  _dnsServer->setErrorReplyCode(DNSReplyCode::NoError);
+  _dnsServer->start(53, "*", _portalConfig.apIP);
+  
+  Serial.println("DNS server started");
+}
+
+void WiFiManager::_setupWebServer() {
+  if (_webServer) {
+    delete _webServer;
+  }
+  
+  _webServer = new ESP8266WebServer(_portalConfig.webServerPort);
+  
+  // 设置路由
+  _webServer->on("/", [this]() { _handleRoot(); });
+  _webServer->on("/wifi", HTTP_GET, [this]() { _handleRoot(); });
+  _webServer->on("/wifi", HTTP_POST, [this]() { _handleWiFiSave(); });
+  _webServer->on("/info", HTTP_GET, [this]() {
+    String info = "AP: " + String(_portalConfig.apName) + "\n";
+    info += "IP: " + _portalConfig.apIP.toString() + "\n";
+    info += "MAC: " + WiFi.softAPmacAddress() + "\n";
+    _webServer->send(200, "text/plain", info);
+  });
+  _webServer->onNotFound([this]() { _handleNotFound(); });
+  
+  _webServer->begin();
+  Serial.println("Web server started on port " + String(_portalConfig.webServerPort));
+}
+
+void WiFiManager::_handleRoot() {
+  String html = _getConfigPageHTML();
+  _webServer->send(200, "text/html", html);
+}
+
+void WiFiManager::_handleWiFiSave() {
+  Serial.println("Handling WiFi save request");
+  
+  // 获取表单数据
+  String ssid = _webServer->arg("ssid");
+  String password = _webServer->arg("password");
+  String macAddress = _webServer->arg("mac");
+  
+  Serial.println("Received SSID: " + ssid);
+  Serial.println("Received MAC: " + macAddress);
+  
+  // 验证输入
+  if (ssid.length() == 0) {
+    String html = _getErrorPageHTML("SSID不能为空");
+    _webServer->send(400, "text/html", html);
+    return;
+  }
+  
+  if (ssid.length() > 31) {
+    String html = _getErrorPageHTML("SSID长度不能超过31个字符");
+    _webServer->send(400, "text/html", html);
+    return;
+  }
+  
+  if (password.length() > 63) {
+    String html = _getErrorPageHTML("密码长度不能超过63个字符");
+    _webServer->send(400, "text/html", html);
+    return;
+  }
+  
+  // 验证MAC地址格式（如果提供）
+  if (macAddress.length() > 0 && macAddress.length() != 17) {
+    String html = _getErrorPageHTML("MAC地址格式错误，应为 AA:BB:CC:DD:EE:FF");
+    _webServer->send(400, "text/html", html);
+    return;
+  }
+  
+  // 保存配置
+  _copyString(_config.ssid, ssid.c_str(), sizeof(_config.ssid));
+  _copyString(_config.password, password.c_str(), sizeof(_config.password));
+  
+  if (macAddress.length() > 0) {
+    _copyString(_config.macAddress, macAddress.c_str(), sizeof(_config.macAddress));
+    _config.useMacAddress = true;
+  } else {
+    _config.useMacAddress = false;
+  }
+  
+  // 重置失败计数
+  _config.failureCount = 0;
+  
+  // 保存到EEPROM
+  if (saveConfigToEEPROM()) {
+    Serial.println("Configuration saved to EEPROM");
+    
+    String html = _getSuccessPageHTML();
+    _webServer->send(200, "text/html", html);
+    
+    // 延迟后重启
+    delay(2000);
+    ESP.restart();
+  } else {
+    String html = _getErrorPageHTML("保存配置失败");
+    _webServer->send(500, "text/html", html);
+  }
+}
+
+void WiFiManager::_handleNotFound() {
+  // 重定向到配置页面
+  _webServer->sendHeader("Location", "/", true);
+  _webServer->send(302, "text/plain", "");
+}
+
+String WiFiManager::_getConfigPageHTML() {
+  String html = R"(
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WeWeather WiFi配置</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f0f0f0; }
+        .container { max-width: 400px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #333; text-align: center; margin-bottom: 30px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 5px; color: #555; font-weight: bold; }
+        input[type="text"], input[type="password"] { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }
+        input[type="submit"] { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
+        input[type="submit"]:hover { background: #0056b3; }
+        .info { background: #e7f3ff; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+        .help { font-size: 12px; color: #666; margin-top: 5px; }
+        .current-config { background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌤️ WeWeather WiFi配置</h1>
+        
+        <div class="info">
+            <strong>当前AP信息：</strong><br>
+            名称: )";
+  
+  html += String(_portalConfig.apName);
+  html += R"(<br>
+            IP地址: )";
+  html += _portalConfig.apIP.toString();
+  html += R"(
+        </div>
+        
+        <div class="current-config">
+            <strong>当前配置：</strong><br>
+            SSID: )";
+  html += String(_config.ssid);
+  html += R"(<br>
+            失败次数: )";
+  html += String(_config.failureCount);
+  html += R"(
+        </div>
+        
+        <form method="POST" action="/wifi">
+            <div class="form-group">
+                <label for="ssid">WiFi名称 (SSID) *</label>
+                <input type="text" id="ssid" name="ssid" required maxlength="31" value=")";
+  html += String(_config.ssid);
+  html += R"(">
+                <div class="help">必填，最多31个字符</div>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">WiFi密码</label>
+                <input type="password" id="password" name="password" maxlength="63">
+                <div class="help">可选，最多63个字符</div>
+            </div>
+            
+            <div class="form-group">
+                <label for="mac">自定义MAC地址</label>
+                <input type="text" id="mac" name="mac" placeholder="AA:BB:CC:DD:EE:FF" maxlength="17" value=")";
+  if (_config.useMacAddress) {
+    html += String(_config.macAddress);
+  }
+  html += R"(">
+                <div class="help">可选，格式: AA:BB:CC:DD:EE:FF，留空使用默认MAC</div>
+            </div>
+            
+            <input type="submit" value="保存并重启">
+        </form>
+    </div>
+</body>
+</html>
+)";
+  
+  return html;
+}
+
+String WiFiManager::_getSuccessPageHTML() {
+  String html = R"(
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>配置成功</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f0f0f0; }
+        .container { max-width: 400px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; }
+        .success { color: #28a745; font-size: 18px; margin-bottom: 20px; }
+        .info { background: #d4edda; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✅ 配置成功</h1>
+        <div class="success">WiFi配置已保存</div>
+        <div class="info">
+            设备将在2秒后自动重启<br>
+            并尝试连接到新的WiFi网络
+        </div>
+        <p>如果连接失败，设备将重新进入配网模式</p>
+    </div>
+</body>
+</html>
+)";
+  
+  return html;
+}
+
+// === EEPROM操作方法实现 ===
+
+bool WiFiManager::saveConfigToEEPROM() {
+  EEPROM.begin(EEPROM_SIZE);
+  
+  // 写入配置版本标识
+  EEPROM.put(CONFIG_START_ADDRESS, CONFIG_VERSION);
+  
+  // 写入WiFi配置
+  EEPROM.put(CONFIG_START_ADDRESS + sizeof(uint32_t), _config);
+  
+  bool success = EEPROM.commit();
+  EEPROM.end();
+  
+  if (success) {
+    Serial.println("WiFi config saved to EEPROM");
+  } else {
+    Serial.println("Failed to save WiFi config to EEPROM");
+  }
+  
+  return success;
+}
+
+bool WiFiManager::loadConfigFromEEPROM() {
+  EEPROM.begin(EEPROM_SIZE);
+  
+  // 读取配置版本标识
+  uint32_t version;
+  EEPROM.get(CONFIG_START_ADDRESS, version);
+  
+  if (version != CONFIG_VERSION) {
+    Serial.println("EEPROM config version mismatch or not found");
+    EEPROM.end();
+    return false;
+  }
+  
+  // 读取WiFi配置
+  WiFiConfig loadedConfig;
+  EEPROM.get(CONFIG_START_ADDRESS + sizeof(uint32_t), loadedConfig);
+  EEPROM.end();
+  
+  // 验证配置有效性
+  if (!_isValidConfig(loadedConfig)) {
+    Serial.println("Invalid config loaded from EEPROM");
+    return false;
+  }
+  
+  _config = loadedConfig;
+  Serial.println("WiFi config loaded from EEPROM");
+  Serial.println("Loaded SSID: " + String(_config.ssid));
+  Serial.println("Failure count: " + String(_config.failureCount));
+  
+  return true;
+}
+
+void WiFiManager::clearConfigFromEEPROM() {
+  EEPROM.begin(EEPROM_SIZE);
+  
+  // 清除配置版本标识
+  EEPROM.put(CONFIG_START_ADDRESS, (uint32_t)0);
+  
+  EEPROM.commit();
+  EEPROM.end();
+  
+  Serial.println("EEPROM config cleared");
+}
+
+void WiFiManager::_writeConfigToEEPROM(const WiFiConfig& config) {
+  EEPROM.put(CONFIG_START_ADDRESS, CONFIG_VERSION);
+  EEPROM.put(CONFIG_START_ADDRESS + sizeof(uint32_t), config);
+}
+
+bool WiFiManager::_readConfigFromEEPROM(WiFiConfig& config) {
+  uint32_t version;
+  EEPROM.get(CONFIG_START_ADDRESS, version);
+  
+  if (version != CONFIG_VERSION) {
+    return false;
+  }
+  
+  EEPROM.get(CONFIG_START_ADDRESS + sizeof(uint32_t), config);
+  return _isValidConfig(config);
+}
+
+bool WiFiManager::_isValidConfig(const WiFiConfig& config) {
+  // 检查SSID是否有效
+  if (strlen(config.ssid) == 0 || strlen(config.ssid) > 31) {
+    return false;
+  }
+  
+  // 检查密码长度
+  if (strlen(config.password) > 63) {
+    return false;
+  }
+  
+  // 检查MAC地址格式（如果启用）
+  if (config.useMacAddress && strlen(config.macAddress) != 17) {
+    return false;
+  }
+  
+  // 检查其他参数的合理性
+  if (config.timeout < 1000 || config.timeout > 60000) {
+    return false;
+  }
+  
+  if (config.maxRetries < 1 || config.maxRetries > 10) {
+    return false;
+  }
+  
+  return true;
+}
+
+// === 智能连接功能实现 ===
+
+bool WiFiManager::smartConnect() {
+  Serial.println("Starting smart connect...");
+  
+  // 首先尝试从EEPROM加载配置
+  if (loadConfigFromEEPROM()) {
+    Serial.println("Using saved configuration");
+  } else {
+    Serial.println("No saved configuration found, using default");
+  }
+  
+  // 检查是否应该直接进入配网模式
+  if (shouldEnterConfigMode()) {
+    Serial.println("Failure count exceeded, entering config mode");
+    return startConfigPortal();
+  }
+  
+  // 尝试连接WiFi
+  bool connected = autoConnect();
+  
+  if (connected) {
+    Serial.println("Smart connect successful");
+    resetFailureCount();
+    saveConfigToEEPROM(); // 保存成功的配置
+    return true;
+  } else {
+    Serial.println("Smart connect failed");
+    incrementFailureCount();
+    saveConfigToEEPROM(); // 保存失败计数
+    
+    // 检查是否需要进入配网模式
+    if (shouldEnterConfigMode()) {
+      Serial.println("Entering config mode after failures");
+      return startConfigPortal();
+    }
+    
+    return false;
+  }
+}
+
+String WiFiManager::_getErrorPageHTML(const String& error) {
+  String html = R"(
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>配置错误</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f0f0f0; }
+        .container { max-width: 400px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; }
+        .error { color: #dc3545; font-size: 18px; margin-bottom: 20px; }
+        .info { background: #f8d7da; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+        a { color: #007bff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>❌ 配置错误</h1>
+        <div class="error">)";
+  
+  html += error;
+  html += R"(</div>
+        <div class="info">
+            请检查输入信息并重试
+        </div>
+        <p><a href="/">返回配置页面</a></p>
+    </div>
+</body>
+</html>
+)";
+  
+  return html;
 }
