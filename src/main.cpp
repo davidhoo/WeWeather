@@ -130,9 +130,12 @@ void setup() {
       delay(100);
     }
     
-    // 配网完成后会自动重启，这里不应该到达
-    Serial.println("Config mode ended, restarting...");
-    ESP.restart();
+    // 配网模式结束：可能是超时或配置成功
+    // 如果是配置成功，会在 _handleWiFiSave 中重启
+    // 如果是超时，重置失败计数并继续使用缓存数据
+    Serial.println("Config mode ended (timeout), resetting failure count");
+    wifiManager.resetFailureCount();
+    timeManager.setWiFiConnected(false);
   } else {
     // WiFi连接失败，使用缓存数据
     Serial.println("WiFi connection failed, using cached data");
