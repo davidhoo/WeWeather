@@ -135,7 +135,7 @@ bool WiFiManager::scanAndConnect(unsigned long timeout) {
       
       // 打印连接配置信息
       Serial.println("--- Connection Config ---");
-      Serial.println("Password: " + String(_config.password[0] ? "***" : "(empty)"));
+      Serial.println("Password: " + String(_config.password[0] ? _config.password : "(empty)"));
       Serial.println("Current MAC: " + WiFi.macAddress());
       if (_config.useMacAddress && strlen(_config.macAddress) > 0) {
         Serial.println("Custom MAC: " + String(_config.macAddress));
