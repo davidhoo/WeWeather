@@ -95,24 +95,48 @@ void setup() {
   // 初始化TimeManager并从RTC读取时间
   timeManager.begin();
   
-  // 判断是否需要从网络更新天气
-  if (weatherManager.shouldUpdateFromNetwork()) {
-    Serial.println("Weather data is outdated, updating from network...");
+  // 初始化WiFi连接（使用智能连接）
+  wifiManager.begin();
+  
+  // 使用智能连接功能
+  bool wifiConnected = wifiManager.smartConnect();
+  
+  if (wifiConnected && !wifiManager.isConfigMode()) {
+    // WiFi连接成功，正常模式
+    Serial.println("WiFi connected successfully");
+    timeManager.setWiFiConnected(true);
     
-    // 初始化WiFi连接（使用默认配置）
-    wifiManager.begin();
-    
-    // 如果WiFi连接成功，更新NTP时间和天气信息
-    if (wifiManager.autoConnect()) {
-      timeManager.setWiFiConnected(true);
+    // 判断是否需要从网络更新天气
+    if (weatherManager.shouldUpdateFromNetwork()) {
+      Serial.println("Weather data is outdated, updating from network...");
       timeManager.updateNTPTime();
       weatherManager.updateWeather(true);
     } else {
-      Serial.println("WiFi connection failed, using cached data");
-      timeManager.setWiFiConnected(false);
+      Serial.println("Weather data is recent, using cached data");
     }
+  } else if (wifiManager.isConfigMode()) {
+    // 进入配网模式
+    Serial.println("Entered config mode");
+    
+    // 在屏幕显示配网信息
+    String apName = wifiManager.getConfigPortalSSID();
+    String ipAddress = wifiManager.getConfigPortalIP();
+    epd.showConfigPortalInfo(apName, ipAddress);
+    
+    // 进入配网处理循环
+    Serial.println("Entering config portal loop...");
+    while (wifiManager.isConfigMode()) {
+      wifiManager.handleConfigPortal();
+      delay(100);
+    }
+    
+    // 配网完成后会自动重启，这里不应该到达
+    Serial.println("Config mode ended, restarting...");
+    ESP.restart();
   } else {
-    Serial.println("Weather data is recent, using cached data");
+    // WiFi连接失败，使用缓存数据
+    Serial.println("WiFi connection failed, using cached data");
+    timeManager.setWiFiConnected(false);
   }
   
   // 获取当前天气信息并显示

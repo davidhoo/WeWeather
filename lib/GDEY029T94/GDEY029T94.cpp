@@ -243,3 +243,96 @@ void GDEY029T94::drawBatteryIcon(int x, int y, float percentage) {
   }
 }
 
+void GDEY029T94::showConfigPortalInfo(const String& apName, const String& ipAddress) {
+  Serial.println("Displaying config portal info on screen");
+  Serial.println("AP Name: " + apName);
+  Serial.println("IP Address: " + ipAddress);
+  
+  display.setFullWindow();
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    display.setTextColor(GxEPD_BLACK);
+    display.setFont(&FreeMonoBold9pt7b);
+    
+    // 标题
+    String title = "WiFi Config Mode";
+    int16_t tbx, tby;
+    uint16_t tbw, tbh;
+    display.getTextBounds(title, 0, 0, &tbx, &tby, &tbw, &tbh);
+    int titleX = alignToPixel8((display.width() - tbw) / 2);
+    int titleY = 25;
+    
+    display.setCursor(titleX, titleY);
+    display.print(title);
+    
+    // 在标题下方画线
+    int lineY = titleY + 10;
+    display.drawLine(alignToPixel8(10), lineY, display.width() - alignToPixel8(10), lineY, GxEPD_BLACK);
+    
+    // AP名称标签
+    String apLabel = "WiFi Name:";
+    int labelX = alignToPixel8(10);
+    int apLabelY = lineY + 30;
+    
+    display.setCursor(labelX, apLabelY);
+    display.print(apLabel);
+    
+    // AP名称值（居中显示）
+    display.getTextBounds(apName, 0, 0, &tbx, &tby, &tbw, &tbh);
+    int apNameX = alignToPixel8((display.width() - tbw) / 2);
+    int apNameY = apLabelY + 25;
+    
+    display.setCursor(apNameX, apNameY);
+    display.print(apName);
+    
+    // IP地址标签
+    String ipLabel = "IP Address:";
+    int ipLabelY = apNameY + 30;
+    
+    display.setCursor(labelX, ipLabelY);
+    display.print(ipLabel);
+    
+    // IP地址值（居中显示）
+    display.getTextBounds(ipAddress, 0, 0, &tbx, &tby, &tbw, &tbh);
+    int ipX = alignToPixel8((display.width() - tbw) / 2);
+    int ipY = ipLabelY + 25;
+    
+    display.setCursor(ipX, ipY);
+    display.print(ipAddress);
+    
+    // 在IP地址下方画线
+    int bottomLineY = ipY + 15;
+    display.drawLine(alignToPixel8(10), bottomLineY, display.width() - alignToPixel8(10), bottomLineY, GxEPD_BLACK);
+    
+    // 说明文字
+    String instruction1 = "1. Connect phone to";
+    String instruction2 = "   above WiFi";
+    String instruction3 = "2. Open browser to";
+    String instruction4 = "   above IP address";
+    String instruction5 = "3. Configure WiFi";
+    
+    int instrY = bottomLineY + 20;
+    int instrLineHeight = 15;
+    
+    display.setCursor(labelX, instrY);
+    display.print(instruction1);
+    
+    display.setCursor(labelX, instrY + instrLineHeight);
+    display.print(instruction2);
+    
+    display.setCursor(labelX, instrY + instrLineHeight * 2);
+    display.print(instruction3);
+    
+    display.setCursor(labelX, instrY + instrLineHeight * 3);
+    display.print(instruction4);
+    
+    display.setCursor(labelX, instrY + instrLineHeight * 4);
+    display.print(instruction5);
+    
+  } while (display.nextPage());
+  
+  display.hibernate();
+  Serial.println("Config portal info displayed on screen");
+}
+
