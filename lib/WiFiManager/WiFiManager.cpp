@@ -36,13 +36,12 @@ void WiFiManager::begin(const WiFiConfig& config) {
 
 void WiFiManager::setDefaultConfig() {
   // 设置默认的 WiFi 配置
-  _copyString(_config.ssid, "Sina Plaza Office", sizeof(_config.ssid));
-  _copyString(_config.password, "urtheone", sizeof(_config.password));
+  _copyString(_config.ssid, "Your_WiFi_SSID", sizeof(_config.ssid));
+  _copyString(_config.password, "Your_WiFi_Password", sizeof(_config.password));
   _config.timeout = 10000; // 10秒超时
   _config.autoReconnect = true;
   _config.maxRetries = 3;
-  _copyString(_config.macAddress, "14:2B:2F:EC:0B:04", sizeof(_config.macAddress));
-  _config.useMacAddress = true; // 默认启用自定义MAC地址
+  _config.useMacAddress = false; // 默认不使用自定义MAC地址
   _config.failureCount = 0; // 初始化失败计数
   _config.configMode = false; // 初始化配网模式状态
 }
@@ -500,7 +499,7 @@ void WiFiManager::incrementFailureCount() {
 }
 
 bool WiFiManager::shouldEnterConfigMode() {
-  return _config.failureCount >= 3;
+  return _config.failureCount >= 10;
 }
 
 String WiFiManager::_generateAPName() {
