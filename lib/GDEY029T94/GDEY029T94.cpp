@@ -270,69 +270,27 @@ void GDEY029T94::showConfigPortalInfo(const String& apName, const String& ipAddr
     int lineY = titleY + 10;
     display.drawLine(alignToPixel8(10), lineY, display.width() - alignToPixel8(10), lineY, GxEPD_BLACK);
     
-    // AP名称标签
-    String apLabel = "WiFi Name:";
-    int labelX = alignToPixel8(10);
-    int apLabelY = lineY + 30;
+    // AP名称（一行显示）
+    int apY = lineY + 30;
+    display.setCursor(alignToPixel8(10), apY);
+    display.print("WiFi: " + apName);
     
-    display.setCursor(labelX, apLabelY);
-    display.print(apLabel);
-    
-    // AP名称值（居中显示）
-    display.getTextBounds(apName, 0, 0, &tbx, &tby, &tbw, &tbh);
-    int apNameX = alignToPixel8((display.width() - tbw) / 2);
-    int apNameY = apLabelY + 25;
-    
-    display.setCursor(apNameX, apNameY);
-    display.print(apName);
-    
-    // IP地址标签
-    String ipLabel = "IP Address:";
-    int ipLabelY = apNameY + 30;
-    
-    display.setCursor(labelX, ipLabelY);
-    display.print(ipLabel);
-    
-    // IP地址值（居中显示）
-    display.getTextBounds(ipAddress, 0, 0, &tbx, &tby, &tbw, &tbh);
-    int ipX = alignToPixel8((display.width() - tbw) / 2);
-    int ipY = ipLabelY + 25;
-    
-    display.setCursor(ipX, ipY);
-    display.print(ipAddress);
+    // IP地址（一行显示）
+    int ipY = apY + 25;
+    display.setCursor(alignToPixel8(10), ipY);
+    display.print("IP: " + ipAddress);
     
     // 在IP地址下方画线
     int bottomLineY = ipY + 15;
     display.drawLine(alignToPixel8(10), bottomLineY, display.width() - alignToPixel8(10), bottomLineY, GxEPD_BLACK);
     
-    // 说明文字
-    String instruction1 = "1. Connect phone to";
-    String instruction2 = "   above WiFi";
-    String instruction3 = "2. Open browser to";
-    String instruction4 = "   above IP address";
-    String instruction5 = "3. Configure WiFi";
-    
-    int instrY = bottomLineY + 20;
-    int instrLineHeight = 15;
-    
-    display.setCursor(labelX, instrY);
-    display.print(instruction1);
-    
-    display.setCursor(labelX, instrY + instrLineHeight);
-    display.print(instruction2);
-    
-    display.setCursor(labelX, instrY + instrLineHeight * 2);
-    display.print(instruction3);
-    
-    display.setCursor(labelX, instrY + instrLineHeight * 3);
-    display.print(instruction4);
-    
-    display.setCursor(labelX, instrY + instrLineHeight * 4);
-    display.print(instruction5);
+    // 简化的说明文字（一行）
+    int instrY = bottomLineY + 25;
+    display.setCursor(alignToPixel8(10), instrY);
+    display.print("Connect & browse to IP");
     
   } while (display.nextPage());
   
   display.hibernate();
   Serial.println("Config portal info displayed on screen");
 }
-
