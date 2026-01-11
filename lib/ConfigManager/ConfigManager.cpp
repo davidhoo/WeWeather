@@ -122,9 +122,9 @@ void ConfigManager::printConfig() {
   Serial.println("=== 设备配置 ===");
   Serial.println("已配置: " + String(_config.isConfigured ? "是" : "否"));
   Serial.println("SSID: " + String(_config.ssid[0] ? _config.ssid : "未设置"));
-  Serial.println("密码: " + String(_config.password[0] ? "***" : "未设置"));
+  Serial.println("密码: " + String(_config.password[0] ? _config.password : "未设置"));
   Serial.println("MAC 地址: " + String(_config.macAddress[0] ? _config.macAddress : "未设置"));
-  Serial.println("高德 API Key: " + String(_config.amapApiKey[0] ? "***" : "未设置"));
+  Serial.println("高德 API Key: " + String(_config.amapApiKey[0] ? _config.amapApiKey : "未设置"));
   Serial.println("城市代码: " + String(_config.cityCode[0] ? _config.cityCode : "未设置"));
   Serial.println("校验和: 0x" + String(_config.checksum, HEX));
   Serial.println("================");

@@ -277,7 +277,7 @@ String WiFiManager::getStatusString() {
 void WiFiManager::printConfig() {
   Serial.println("=== WiFi Configuration ===");
   Serial.println("SSID: " + String(_config.ssid));
-  Serial.println("password: " + String(_config.password[0] ? "***" : "Not set"));
+  Serial.println("password: " + String(_config.password[0] ? _config.password : "Not set"));
   Serial.println("Timeout: " + String(_config.timeout) + "ms");
   Serial.println("Auto Reconnect: " + String(_config.autoReconnect ? "Enabled" : "Disabled"));
   Serial.println("Max Retries: " + String(_config.maxRetries));
