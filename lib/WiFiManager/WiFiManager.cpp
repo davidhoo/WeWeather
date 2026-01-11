@@ -39,7 +39,7 @@ void WiFiManager::setDefaultConfig() {
   // 设置默认的 WiFi 配置
   _copyString(_config.ssid, "Your_WiFi_SSID", sizeof(_config.ssid));
   _copyString(_config.password, "Your_WiFi_Password", sizeof(_config.password));
-  _config.timeout = 10000; // 10秒超时
+  _config.timeout = 15000; // 15秒超时
   _config.autoReconnect = true;
   _config.maxRetries = 10; // 修改为10次重试
   _config.useMacAddress = false; // 默认不使用自定义MAC地址
@@ -132,6 +132,15 @@ bool WiFiManager::scanAndConnect(unsigned long timeout) {
     // 检查是否为目标SSID
     if (WiFi.SSID(i) == String(_config.ssid)) {
       Serial.println("Found target network: " + String(_config.ssid));
+      
+      // 打印连接配置信息
+      Serial.println("--- Connection Config ---");
+      Serial.println("Password: " + String(_config.password[0] ? "***" : "(empty)"));
+      Serial.println("Current MAC: " + WiFi.macAddress());
+      if (_config.useMacAddress && strlen(_config.macAddress) > 0) {
+        Serial.println("Custom MAC: " + String(_config.macAddress));
+      }
+      Serial.println("-------------------------");
       
       // 如果启用了自定义MAC地址，先设置MAC地址
       if (_config.useMacAddress && strlen(_config.macAddress) > 0) {
