@@ -13,12 +13,12 @@
 
 // 天气信息结构体
 struct WeatherInfo {
-  float Temperature;    // 温度（摄氏度）
-  int Humidity;         // 湿度百分比
-  char Symbol;          // 天气符号字符
-  String WindDirection; // 风向
-  String WindSpeed;     // 风速
-  String Weather;       // 天气状况
+  float Temperature;       // 温度（摄氏度）
+  int Humidity;            // 湿度百分比
+  char Symbol;             // 天气符号字符
+  char WindDirection[16];  // 风向（固定大小，节省 RAM）
+  char WindSpeed[8];       // 风速（固定大小，节省 RAM）
+  char Weather[16];        // 天气状况（固定大小，节省 RAM）
   // 天气符号映射:
   // n=晴(sunny), d=雪(snow), m=雨(rain), l=雾(fog), c=阴(overcast), o=多云(cloudy), k=雷雨(thunderstorm)
 };
