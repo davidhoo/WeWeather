@@ -186,7 +186,7 @@ void TimeManager::printTimeDebug(const char* prefix, const DateTime& dt) {
     snprintf(buffer, sizeof(buffer), "%s: %04d/%02d/%02d %02d:%02d:%02d",
              prefix, 2000 + dt.year, dt.month, dt.day,
              dt.hour, dt.minute, dt.second);
-    Logger::debug("TimeManager", buffer);
+    Logger::debug(F("TimeManager"), buffer);
 }
 
 String TimeManager::getFormattedTime(const DateTime& currentTime) {

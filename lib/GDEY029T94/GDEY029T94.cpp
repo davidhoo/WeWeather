@@ -33,8 +33,8 @@ void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo&
     snprintf(tempStr, sizeof(tempStr), "%.0fC", temperature);
     snprintf(humStr, sizeof(humStr), "%.0f%%", humidity);
 
-    Logger::debug("Display", ("Temp string: " + String(tempStr)).c_str());
-    Logger::debug("Display", ("Hum string: " + String(humStr)).c_str());
+    Logger::debug(F("Display"), ("Temp string: " + String(tempStr)).c_str());
+    Logger::debug(F("Display"), ("Hum string: " + String(humStr)).c_str());
   }
 
   if (!isnan(batteryPercentage)) {
@@ -162,7 +162,7 @@ void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo&
     char buffer[64];
     snprintf(buffer, sizeof(buffer), "Temp pos: X=%d, Y=55; Hum pos: X=%d, Y=75",
              alignToPixel8(display.width() - 10), alignToPixel8(display.width() - 10));
-    Logger::debug("Display", buffer);
+    Logger::debug(F("Display"), buffer);
     Logger::debug(F("Display"), F("Temperature and humidity displayed"));
   } else {
     Logger::debug(F("Display"), F("Temperature or humidity is NaN, not displaying"));

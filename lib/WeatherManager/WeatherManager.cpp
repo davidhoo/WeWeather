@@ -65,7 +65,7 @@ bool WeatherManager::shouldUpdateFromNetwork() {
            "Current: %lu, Last: %lu, Diff: %lu sec (%lu min), %s",
            (unsigned long)currentTime, lastUpdateTime, timeDiffSeconds, timeDiffSeconds / 60,
            shouldUpdate ? "need update" : "using cache");
-  Logger::debug("WeatherManager", buffer);
+  Logger::debug(F("WeatherManager"), buffer);
 
   return shouldUpdate;
 }
@@ -77,7 +77,7 @@ bool WeatherManager::fetchWeatherFromNetwork() {
   // API URL
   String url = "https://restapi.amap.com/v3/weather/weatherInfo?key=" + String(_apiKey) + "&city=" + _cityCode + "&extensions=base&output=JSON";
   
-  Logger::info("WeatherManager", ("Fetching weather data from: " + url).c_str());
+  Logger::info(F("WeatherManager"), ("Fetching weather data from: " + url).c_str());
   
   client.setInsecure(); // 跳过SSL证书验证
   http.begin(client, url);
@@ -87,7 +87,7 @@ bool WeatherManager::fetchWeatherFromNetwork() {
   
   if (httpResponseCode == 200) {
     String payload = http.getString();
-    Logger::debug("WeatherManager", ("Weather data received: " + payload).c_str());
+    Logger::debug(F("WeatherManager"), ("Weather data received: " + payload).c_str());
     
     // 解析JSON数据
     JsonDocument doc;
@@ -95,7 +95,7 @@ bool WeatherManager::fetchWeatherFromNetwork() {
     
     if (error) {
       String msg = "Failed to parse JSON: " + String(error.c_str());
-      Logger::error("WeatherManager", msg.c_str());
+      Logger::error(F("WeatherManager"), msg.c_str());
       http.end();
       return false;
     }
@@ -104,7 +104,7 @@ bool WeatherManager::fetchWeatherFromNetwork() {
     String status = doc["status"];
     if (status != "1") {
       String msg = "API returned error status: " + status;
-      Logger::error("WeatherManager", msg.c_str());
+      Logger::error(F("WeatherManager"), msg.c_str());
       http.end();
       return false;
     }
@@ -125,17 +125,17 @@ bool WeatherManager::fetchWeatherFromNetwork() {
     Logger::info(F("WeatherManager"), F("Weather updated successfully"));
     Logger::infoValue(F("WeatherManager"), F("Temperature:"), _currentWeather.Temperature, F("°C"), 1);
     Logger::infoValue(F("WeatherManager"), F("Humidity:"), _currentWeather.Humidity, F("%"));
-    Logger::info("WeatherManager", ("Wind Direction: " + _currentWeather.WindDirection).c_str());
-    Logger::info("WeatherManager", ("Wind Speed: " + _currentWeather.WindSpeed).c_str());
-    Logger::info("WeatherManager", ("Weather: " + _currentWeather.Weather).c_str());
+    Logger::info(F("WeatherManager"), ("Wind Direction: " + _currentWeather.WindDirection).c_str());
+    Logger::info(F("WeatherManager"), ("Wind Speed: " + _currentWeather.WindSpeed).c_str());
+    Logger::info(F("WeatherManager"), ("Weather: " + _currentWeather.Weather).c_str());
     char symbolMsg[32];
     snprintf(symbolMsg, sizeof(symbolMsg), "Symbol: %c", _currentWeather.Symbol);
-    Logger::info("WeatherManager", symbolMsg);
+    Logger::info(F("WeatherManager"), symbolMsg);
 
     http.end();
     return true;
   } else {
-    Logger::error("WeatherManager", ("HTTP request failed with code: " + String(httpResponseCode)).c_str());
+    Logger::error(F("WeatherManager"), ("HTTP request failed with code: " + String(httpResponseCode)).c_str());
     http.end();
     return false;
   }
@@ -169,7 +169,7 @@ bool WeatherManager::readWeatherFromStorage() {
   Logger::info(F("WeatherManager"), F("Weather data read from EEPROM successfully"));
   Logger::infoValue(F("WeatherManager"), F("Temperature:"), _currentWeather.Temperature, F("°C"), 1);
   Logger::infoValue(F("WeatherManager"), F("Humidity:"), _currentWeather.Humidity, F("%"));
-  Logger::info("WeatherManager", ("Weather: " + _currentWeather.Weather).c_str());
+  Logger::info(F("WeatherManager"), ("Weather: " + _currentWeather.Weather).c_str());
   Logger::infoValue(F("WeatherManager"), F("Last Update:"), (int)storageData.lastUpdateTime);
 
   return true;
@@ -204,7 +204,7 @@ bool WeatherManager::writeWeatherToStorage() {
     Logger::info(F("WeatherManager"), F("Weather data written to EEPROM successfully"));
     Logger::infoValue(F("WeatherManager"), F("Temperature:"), storageData.temperature, F("°C"), 1);
     Logger::infoValue(F("WeatherManager"), F("Humidity:"), storageData.humidity, F("%"));
-    Logger::info("WeatherManager", ("Weather: " + String(storageData.weather)).c_str());
+    Logger::info(F("WeatherManager"), ("Weather: " + String(storageData.weather)).c_str());
     Logger::infoValue(F("WeatherManager"), F("Last Update:"), (int)storageData.lastUpdateTime);
   } else {
     Logger::error(F("WeatherManager"), F("Failed to write weather data to EEPROM"));
@@ -409,7 +409,7 @@ unsigned long WeatherManager::getCurrentUnixTimestamp() {
       return 0;
     }
 
-    Logger::debug("WeatherManager", ("RTC time converted to Unix timestamp: " + String((unsigned long)now)).c_str());
+    Logger::debug(F("WeatherManager"), ("RTC time converted to Unix timestamp: " + String((unsigned long)now)).c_str());
   }
   return now;
 }

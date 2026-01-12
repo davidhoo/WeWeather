@@ -138,6 +138,51 @@ void Logger::error(const char* component, const char* message) {
 }
 
 /**
+ * @brief 内部日志输出函数（Flash组件名 + 普通消息）
+ */
+void Logger::log(LogLevel level, const __FlashStringHelper* component, const char* message) {
+  // 检查日志级别是否满足输出条件
+  if (level < minLogLevel) {
+    return;
+  }
+  
+  // 输出日志格式：[LEVEL] Component: Message
+  Serial.print(getLevelTag(level));
+  Serial.print(F(" "));
+  Serial.print(component);
+  Serial.print(F(": "));
+  Serial.println(message);
+}
+
+/**
+ * @brief 输出调试级别日志（Flash组件名 + 普通消息）
+ */
+void Logger::debug(const __FlashStringHelper* component, const char* message) {
+  log(LOG_LEVEL_DEBUG, component, message);
+}
+
+/**
+ * @brief 输出信息级别日志（Flash组件名 + 普通消息）
+ */
+void Logger::info(const __FlashStringHelper* component, const char* message) {
+  log(LOG_LEVEL_INFO, component, message);
+}
+
+/**
+ * @brief 输出警告级别日志（Flash组件名 + 普通消息）
+ */
+void Logger::warning(const __FlashStringHelper* component, const char* message) {
+  log(LOG_LEVEL_WARNING, component, message);
+}
+
+/**
+ * @brief 输出错误级别日志（Flash组件名 + 普通消息）
+ */
+void Logger::error(const __FlashStringHelper* component, const char* message) {
+  log(LOG_LEVEL_ERROR, component, message);
+}
+
+/**
  * @brief 输出带浮点数值的信息日志
  */
 void Logger::infoValue(const __FlashStringHelper* component, const __FlashStringHelper* prefix,

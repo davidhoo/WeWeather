@@ -42,7 +42,7 @@ void WiFiManager::setCredentials(const char* ssid, const char* password) {
   _copyString(_config.password, password, sizeof(_config.password));
 
   String msg = "WiFi credentials updated for SSID: " + String(_config.ssid);
-  Logger::info("WiFiManager", msg.c_str());
+  Logger::info(F("WiFiManager"), msg.c_str());
 }
 
 void WiFiManager::setConfig(const WiFiConfig& config) {
@@ -68,7 +68,7 @@ bool WiFiManager::connect(unsigned long timeout) {
   // 如果启用了自定义MAC地址，先设置MAC地址
   if (_config.useMacAddress && strlen(_config.macAddress) > 0) {
     String msg = "Setting custom MAC address: " + String(_config.macAddress);
-    Logger::info("WiFiManager", msg.c_str());
+    Logger::info(F("WiFiManager"), msg.c_str());
     
     // 将MAC地址字符串转换为字节数组
     uint8_t mac[6];
@@ -86,7 +86,7 @@ bool WiFiManager::connect(unsigned long timeout) {
   unsigned long connectTimeout = (timeout == 0) ? _config.timeout : timeout;
   
   String msg = "Connecting to WiFi: " + String(_config.ssid);
-  Logger::info("WiFiManager", msg.c_str());
+  Logger::info(F("WiFiManager"), msg.c_str());
   WiFi.begin(_config.ssid, _config.password);
   
   return _waitForConnection(connectTimeout);
@@ -125,12 +125,12 @@ bool WiFiManager::scanAndConnect(unsigned long timeout) {
     // 检查是否找到目标网络
     if (WiFi.SSID(i) == String(_config.ssid)) {
       String msg = "Found target network: " + String(_config.ssid);
-      Logger::info("WiFiManager", msg.c_str());
+      Logger::info(F("WiFiManager"), msg.c_str());
 
       // 如果配置了自定义MAC地址，则设置
       if (_config.useMacAddress && strlen(_config.macAddress) > 0) {
         String macMsg = "Setting custom MAC address: " + String(_config.macAddress);
-        Logger::info("WiFiManager", macMsg.c_str());
+        Logger::info(F("WiFiManager"), macMsg.c_str());
 
         uint8_t mac[6];
         if (_parseMacAddress(_config.macAddress, mac)) {
@@ -154,7 +154,7 @@ bool WiFiManager::scanAndConnect(unsigned long timeout) {
   }
 
   String msg = "Target network not found: " + String(_config.ssid);
-  Logger::warning("WiFiManager", msg.c_str());
+  Logger::warning(F("WiFiManager"), msg.c_str());
   return false;
 }
 
@@ -169,7 +169,7 @@ bool WiFiManager::autoConnect() {
   
   while (retries < _config.maxRetries && !connected) {
     String msg = "Auto-connect attempt " + String(retries + 1) + "/" + String(_config.maxRetries);
-    Logger::info("WiFiManager", msg.c_str());
+    Logger::info(F("WiFiManager"), msg.c_str());
     
     connected = scanAndConnect();
     
@@ -188,7 +188,7 @@ bool WiFiManager::autoConnect() {
     Logger::info(F("WiFiManager"), F("Auto-connect successful"));
   } else {
     String msg = "Auto-connect failed after " + String(_config.maxRetries) + " attempts";
-    Logger::error("WiFiManager", msg.c_str());
+    Logger::error(F("WiFiManager"), msg.c_str());
   }
   
   return connected;
@@ -248,7 +248,7 @@ void WiFiManager::setMaxRetries(int retries) {
 void WiFiManager::setMacAddress(const char* macAddress) {
   _copyString(_config.macAddress, macAddress, sizeof(_config.macAddress));
   String msg = "MAC address updated: " + String(_config.macAddress);
-  Logger::info("WiFiManager", msg.c_str());
+  Logger::info(F("WiFiManager"), msg.c_str());
 }
 
 String WiFiManager::getMacAddress() {
@@ -261,7 +261,7 @@ String WiFiManager::getMacAddress() {
 void WiFiManager::enableMacAddress(bool enable) {
   _config.useMacAddress = enable;
   String msg = "Custom MAC address " + String(enable ? "enabled" : "disabled");
-  Logger::info("WiFiManager", msg.c_str());
+  Logger::info(F("WiFiManager"), msg.c_str());
 }
 
 String WiFiManager::getStatusString() {
@@ -286,13 +286,13 @@ String WiFiManager::getStatusString() {
 void WiFiManager::printConfig() {
   Logger::info(F("WiFiManager"), F("=== WiFi Configuration ==="));
   String msg = "SSID: " + String(_config.ssid);
-  Logger::info("WiFiManager", msg.c_str());
+  Logger::info(F("WiFiManager"), msg.c_str());
   Logger::info(F("WiFiManager"), _config.password[0] ? F("password: ***") : F("password: Not set"));
   Logger::infoValue(F("WiFiManager"), F("Timeout:"), (int)_config.timeout, F("ms"));
   Logger::info(F("WiFiManager"), _config.autoReconnect ? F("Auto Reconnect: Enabled") : F("Auto Reconnect: Disabled"));
   Logger::infoValue(F("WiFiManager"), F("Max Retries:"), _config.maxRetries);
   msg = "MAC Address: " + String(_config.useMacAddress ? _config.macAddress : "Default");
-  Logger::info("WiFiManager", msg.c_str());
+  Logger::info(F("WiFiManager"), msg.c_str());
   Logger::info(F("WiFiManager"), _config.useMacAddress ? F("Use Custom MAC: Yes") : F("Use Custom MAC: No"));
   Logger::info(F("WiFiManager"), F("========================"));
 }
@@ -301,7 +301,7 @@ void WiFiManager::_printNetworkInfo(int networkIndex) {
   String msg = String(networkIndex + 1) + ": " + WiFi.SSID(networkIndex) +
                " (" + String(WiFi.RSSI(networkIndex)) + ")" +
                ((WiFi.encryptionType(networkIndex) == ENC_TYPE_NONE) ? " " : "*");
-  Logger::debug("WiFiManager", msg.c_str());
+  Logger::debug(F("WiFiManager"), msg.c_str());
 }
 
 bool WiFiManager::_waitForConnection(unsigned long timeout) {
@@ -319,13 +319,13 @@ bool WiFiManager::_waitForConnection(unsigned long timeout) {
   if (WiFi.status() == WL_CONNECTED) {
     Logger::info(F("WiFiManager"), F("WiFi connected successfully"));
     String msg = "IP address: " + WiFi.localIP().toString();
-    Logger::info("WiFiManager", msg.c_str());
+    Logger::info(F("WiFiManager"), msg.c_str());
     Logger::infoValue(F("WiFiManager"), F("Signal strength:"), WiFi.RSSI(), F("dBm"));
     return true;
   } else {
     Logger::error(F("WiFiManager"), F("Failed to connect to WiFi"));
     String msg = "Status: " + getStatusString();
-    Logger::error("WiFiManager", msg.c_str());
+    Logger::error(F("WiFiManager"), msg.c_str());
     return false;
   }
 }

@@ -99,6 +99,34 @@ public:
   static void error(const char* component, const char* message);
   
   /**
+   * @brief 输出调试级别日志（Flash组件名 + 普通消息）
+   * @param component 组件名称（使用 F() 宏）
+   * @param message 日志消息（普通字符串）
+   */
+  static void debug(const __FlashStringHelper* component, const char* message);
+  
+  /**
+   * @brief 输出信息级别日志（Flash组件名 + 普通消息）
+   * @param component 组件名称（使用 F() 宏）
+   * @param message 日志消息（普通字符串）
+   */
+  static void info(const __FlashStringHelper* component, const char* message);
+  
+  /**
+   * @brief 输出警告级别日志（Flash组件名 + 普通消息）
+   * @param component 组件名称（使用 F() 宏）
+   * @param message 日志消息（普通字符串）
+   */
+  static void warning(const __FlashStringHelper* component, const char* message);
+  
+  /**
+   * @brief 输出错误级别日志（Flash组件名 + 普通消息）
+   * @param component 组件名称（使用 F() 宏）
+   * @param message 日志消息（普通字符串）
+   */
+  static void error(const __FlashStringHelper* component, const char* message);
+  
+  /**
    * @brief 输出带数值的信息日志（优化版本，避免 String 拼接）
    * @param component 组件名称（使用 F() 宏）
    * @param prefix 前缀消息（使用 F() 宏）
@@ -138,6 +166,14 @@ private:
    * @param message 日志消息
    */
   static void log(LogLevel level, const char* component, const char* message);
+  
+  /**
+   * @brief 内部日志输出函数（Flash组件名 + 普通消息）
+   * @param level 日志级别
+   * @param component 组件名称（Flash字符串）
+   * @param message 日志消息（普通字符串）
+   */
+  static void log(LogLevel level, const __FlashStringHelper* component, const char* message);
   
   /**
    * @brief 获取日志级别标签
