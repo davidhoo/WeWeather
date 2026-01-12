@@ -16,9 +16,24 @@ void GDEY029T94::setRotation(int rotation) {
 }
 
 void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo& currentWeather, float temperature, float humidity, float batteryPercentage) {
-  String timeStr = TimeManager::getFormattedTime(currentTime);
-  String dateStr = TimeManager::getFormattedDate(currentTime);
-  String weatherStr = WeatherManager::getWeatherInfo(currentWeather);
+  // 使用栈上的字符数组代替 String 对象，节省 RAM
+  char timeStr[16];
+  char dateStr[32];
+  char weatherStr[64];
+  
+  // 获取格式化的时间和日期字符串
+  String tempTimeStr = TimeManager::getFormattedTime(currentTime);
+  String tempDateStr = TimeManager::getFormattedDate(currentTime);
+  String tempWeatherStr = WeatherManager::getWeatherInfo(currentWeather);
+  
+  strncpy(timeStr, tempTimeStr.c_str(), sizeof(timeStr) - 1);
+  timeStr[sizeof(timeStr) - 1] = '\0';
+  
+  strncpy(dateStr, tempDateStr.c_str(), sizeof(dateStr) - 1);
+  dateStr[sizeof(dateStr) - 1] = '\0';
+  
+  strncpy(weatherStr, tempWeatherStr.c_str(), sizeof(weatherStr) - 1);
+  weatherStr[sizeof(weatherStr) - 1] = '\0';
   
   // 调试输出移到循环外部，避免重复打印
   Logger::infoValue(F("Display"), F("Temperature:"), temperature, F("°C"), 1);
@@ -30,11 +45,15 @@ void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo&
     // 准备温度和湿度字符串
     char tempStr[16];
     char humStr[16];
+    char buffer[64];
     snprintf(tempStr, sizeof(tempStr), "%.0fC", temperature);
     snprintf(humStr, sizeof(humStr), "%.0f%%", humidity);
 
-    Logger::debug(F("Display"), ("Temp string: " + String(tempStr)).c_str());
-    Logger::debug(F("Display"), ("Hum string: " + String(humStr)).c_str());
+    snprintf(buffer, sizeof(buffer), "Temp string: %s", tempStr);
+    Logger::debug(F("Display"), buffer);
+    
+    snprintf(buffer, sizeof(buffer), "Hum string: %s", humStr);
+    Logger::debug(F("Display"), buffer);
   }
 
   if (!isnan(batteryPercentage)) {

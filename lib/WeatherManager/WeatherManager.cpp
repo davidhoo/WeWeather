@@ -113,24 +113,43 @@ bool WeatherManager::fetchWeatherFromNetwork() {
     JsonObject lives = doc["lives"][0];
     
     // 更新WeatherInfo
+    // 更新WeatherInfo
     _currentWeather.Temperature = lives["temperature"].as<float>();
     _currentWeather.Humidity = lives["humidity"].as<int>();
-    _currentWeather.WindDirection = lives["winddirection"].as<String>();
-    _currentWeather.WindSpeed = lives["windpower"].as<String>();
-    _currentWeather.Weather = lives["weather"].as<String>();
+    
+    // 使用 strncpy 安全地复制字符串到固定大小的字符数组
+    const char* windDir = lives["winddirection"].as<const char*>();
+    const char* windPower = lives["windpower"].as<const char*>();
+    const char* weather = lives["weather"].as<const char*>();
+    
+    strncpy(_currentWeather.WindDirection, windDir ? windDir : "", sizeof(_currentWeather.WindDirection) - 1);
+    _currentWeather.WindDirection[sizeof(_currentWeather.WindDirection) - 1] = '\0';
+    
+    strncpy(_currentWeather.WindSpeed, windPower ? windPower : "", sizeof(_currentWeather.WindSpeed) - 1);
+    _currentWeather.WindSpeed[sizeof(_currentWeather.WindSpeed) - 1] = '\0';
+    
+    strncpy(_currentWeather.Weather, weather ? weather : "", sizeof(_currentWeather.Weather) - 1);
+    _currentWeather.Weather[sizeof(_currentWeather.Weather) - 1] = '\0';
     
     // 根据天气状况设置符号
     _currentWeather.Symbol = mapWeatherToSymbol(_currentWeather.Weather);
-
     Logger::info(F("WeatherManager"), F("Weather updated successfully"));
     Logger::infoValue(F("WeatherManager"), F("Temperature:"), _currentWeather.Temperature, F("°C"), 1);
     Logger::infoValue(F("WeatherManager"), F("Humidity:"), _currentWeather.Humidity, F("%"));
-    Logger::info(F("WeatherManager"), ("Wind Direction: " + _currentWeather.WindDirection).c_str());
-    Logger::info(F("WeatherManager"), ("Wind Speed: " + _currentWeather.WindSpeed).c_str());
-    Logger::info(F("WeatherManager"), ("Weather: " + _currentWeather.Weather).c_str());
-    char symbolMsg[32];
-    snprintf(symbolMsg, sizeof(symbolMsg), "Symbol: %c", _currentWeather.Symbol);
-    Logger::info(F("WeatherManager"), symbolMsg);
+    
+    // 使用栈上的缓冲区避免 String 拼接
+    char buffer[64];
+    snprintf(buffer, sizeof(buffer), "Wind Direction: %s", _currentWeather.WindDirection);
+    Logger::info(F("WeatherManager"), buffer);
+    
+    snprintf(buffer, sizeof(buffer), "Wind Speed: %s", _currentWeather.WindSpeed);
+    Logger::info(F("WeatherManager"), buffer);
+    
+    snprintf(buffer, sizeof(buffer), "Weather: %s", _currentWeather.Weather);
+    Logger::info(F("WeatherManager"), buffer);
+    
+    snprintf(buffer, sizeof(buffer), "Symbol: %c", _currentWeather.Symbol);
+    Logger::info(F("WeatherManager"), buffer);
 
     http.end();
     return true;
@@ -169,7 +188,11 @@ bool WeatherManager::readWeatherFromStorage() {
   Logger::info(F("WeatherManager"), F("Weather data read from EEPROM successfully"));
   Logger::infoValue(F("WeatherManager"), F("Temperature:"), _currentWeather.Temperature, F("°C"), 1);
   Logger::infoValue(F("WeatherManager"), F("Humidity:"), _currentWeather.Humidity, F("%"));
-  Logger::info(F("WeatherManager"), ("Weather: " + _currentWeather.Weather).c_str());
+  
+  char buffer[64];
+  snprintf(buffer, sizeof(buffer), "Weather: %s", _currentWeather.Weather);
+  Logger::info(F("WeatherManager"), buffer);
+  
   Logger::infoValue(F("WeatherManager"), F("Last Update:"), (int)storageData.lastUpdateTime);
 
   return true;
@@ -204,7 +227,11 @@ bool WeatherManager::writeWeatherToStorage() {
     Logger::info(F("WeatherManager"), F("Weather data written to EEPROM successfully"));
     Logger::infoValue(F("WeatherManager"), F("Temperature:"), storageData.temperature, F("°C"), 1);
     Logger::infoValue(F("WeatherManager"), F("Humidity:"), storageData.humidity, F("%"));
-    Logger::info(F("WeatherManager"), ("Weather: " + String(storageData.weather)).c_str());
+    
+    char buffer[64];
+    snprintf(buffer, sizeof(buffer), "Weather: %s", storageData.weather);
+    Logger::info(F("WeatherManager"), buffer);
+    
     Logger::infoValue(F("WeatherManager"), F("Last Update:"), (int)storageData.lastUpdateTime);
   } else {
     Logger::error(F("WeatherManager"), F("Failed to write weather data to EEPROM"));
@@ -328,9 +355,12 @@ void WeatherManager::initializeDefaultWeather() {
   _currentWeather.Temperature = 23.5;
   _currentWeather.Humidity = 65;
   _currentWeather.Symbol = 'n';
-  _currentWeather.WindDirection = "北";
-  _currentWeather.WindSpeed = "≤3";
-  _currentWeather.Weather = "晴";
+  strncpy(_currentWeather.WindDirection, "北", sizeof(_currentWeather.WindDirection) - 1);
+  _currentWeather.WindDirection[sizeof(_currentWeather.WindDirection) - 1] = '\0';
+  strncpy(_currentWeather.WindSpeed, "≤3", sizeof(_currentWeather.WindSpeed) - 1);
+  _currentWeather.WindSpeed[sizeof(_currentWeather.WindSpeed) - 1] = '\0';
+  strncpy(_currentWeather.Weather, "晴", sizeof(_currentWeather.Weather) - 1);
+  _currentWeather.Weather[sizeof(_currentWeather.Weather) - 1] = '\0';
 }
 
 void WeatherManager::convertToStorageData(const WeatherInfo& weatherInfo, WeatherStorageData& storageData) {
@@ -338,14 +368,14 @@ void WeatherManager::convertToStorageData(const WeatherInfo& weatherInfo, Weathe
   storageData.humidity = weatherInfo.Humidity;
   storageData.symbol = weatherInfo.Symbol;
   
-  // 复制字符串，确保不超过缓冲区大小
-  strncpy(storageData.windDirection, weatherInfo.WindDirection.c_str(), sizeof(storageData.windDirection) - 1);
+  // 直接复制字符数组，确保不超过缓冲区大小
+  strncpy(storageData.windDirection, weatherInfo.WindDirection, sizeof(storageData.windDirection) - 1);
   storageData.windDirection[sizeof(storageData.windDirection) - 1] = '\0';
   
-  strncpy(storageData.windSpeed, weatherInfo.WindSpeed.c_str(), sizeof(storageData.windSpeed) - 1);
+  strncpy(storageData.windSpeed, weatherInfo.WindSpeed, sizeof(storageData.windSpeed) - 1);
   storageData.windSpeed[sizeof(storageData.windSpeed) - 1] = '\0';
   
-  strncpy(storageData.weather, weatherInfo.Weather.c_str(), sizeof(storageData.weather) - 1);
+  strncpy(storageData.weather, weatherInfo.Weather, sizeof(storageData.weather) - 1);
   storageData.weather[sizeof(storageData.weather) - 1] = '\0';
 }
 
@@ -353,9 +383,16 @@ void WeatherManager::convertFromStorageData(const WeatherStorageData& storageDat
   weatherInfo.Temperature = storageData.temperature;
   weatherInfo.Humidity = storageData.humidity;
   weatherInfo.Symbol = storageData.symbol;
-  weatherInfo.WindDirection = String(storageData.windDirection);
-  weatherInfo.WindSpeed = String(storageData.windSpeed);
-  weatherInfo.Weather = String(storageData.weather);
+  
+  // 直接复制字符数组
+  strncpy(weatherInfo.WindDirection, storageData.windDirection, sizeof(weatherInfo.WindDirection) - 1);
+  weatherInfo.WindDirection[sizeof(weatherInfo.WindDirection) - 1] = '\0';
+  
+  strncpy(weatherInfo.WindSpeed, storageData.windSpeed, sizeof(weatherInfo.WindSpeed) - 1);
+  weatherInfo.WindSpeed[sizeof(weatherInfo.WindSpeed) - 1] = '\0';
+  
+  strncpy(weatherInfo.Weather, storageData.weather, sizeof(weatherInfo.Weather) - 1);
+  weatherInfo.Weather[sizeof(weatherInfo.Weather) - 1] = '\0';
 }
 
 byte WeatherManager::calculateChecksum(const WeatherStorageData& data) {
@@ -409,7 +446,9 @@ unsigned long WeatherManager::getCurrentUnixTimestamp() {
       return 0;
     }
 
-    Logger::debug(F("WeatherManager"), ("RTC time converted to Unix timestamp: " + String((unsigned long)now)).c_str());
+    char buffer[64];
+    snprintf(buffer, sizeof(buffer), "RTC time converted to Unix timestamp: %lu", (unsigned long)now);
+    Logger::debug(F("WeatherManager"), buffer);
   }
   return now;
 }
@@ -435,15 +474,23 @@ String WeatherManager::formatWindSpeed(const String& windSpeed) {
 
 String WeatherManager::getWeatherInfo(const WeatherInfo& currentWeather) {
   // 格式化天气信息用于显示
-  String weatherString = "";
+  static char weatherString[64];
+  char translatedDir[32];
+  char formattedSpeed[16];
+  
+  // 翻译风向
+  strncpy(translatedDir, translateWindDirection(currentWeather.WindDirection).c_str(), sizeof(translatedDir) - 1);
+  translatedDir[sizeof(translatedDir) - 1] = '\0';
+  
+  // 格式化风速
+  strncpy(formattedSpeed, formatWindSpeed(currentWeather.WindSpeed).c_str(), sizeof(formattedSpeed) - 1);
+  formattedSpeed[sizeof(formattedSpeed) - 1] = '\0';
   
   // 按照新格式显示天气信息: 22C 46% NortheEast ≤3
-  weatherString += String(currentWeather.Temperature, 0) + "C ";
-  weatherString += String(currentWeather.Humidity) + "% ";
-  weatherString += translateWindDirection(currentWeather.WindDirection) + " ";
-  weatherString += formatWindSpeed(currentWeather.WindSpeed);
+  snprintf(weatherString, sizeof(weatherString), "%.0fC %d%% %s %s",
+           currentWeather.Temperature, currentWeather.Humidity, translatedDir, formattedSpeed);
   
-  return weatherString;
+  return String(weatherString);
 }
 
 char WeatherManager::getWeatherSymbol(const WeatherInfo& currentWeather) {
