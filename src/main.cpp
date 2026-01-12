@@ -163,7 +163,11 @@ void handleConfigMode() {
 void updateWeatherData() {
   if (weatherManager.shouldUpdateFromNetwork()) {
     Serial.println("Weather data is outdated, updating from network...");
+    // 先更新 NTP 时间并写入 RTC
     timeManager.updateNTPTime();
+    // 等待确保 RTC 时间已写入
+    delay(200);
+    // 更新天气数据（此时 WeatherManager 会从 RTC 读取时间戳）
     weatherManager.updateWeather(true);
   } else {
     Serial.println("Weather data is recent, using cached data");
