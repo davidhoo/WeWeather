@@ -4,5 +4,8 @@
 .vscode/launch.json
 .vscode/ipch
 
+# 排除配置文件（包含敏感信息）
+config.h
+
 # 排除 PDF 文档
 *.pdf

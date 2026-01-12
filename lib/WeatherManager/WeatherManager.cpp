@@ -1,7 +1,8 @@
 #include "WeatherManager.h"
+#include "../../config.h"
 
 WeatherManager::WeatherManager(const char* apiKey, const String& cityCode, BM8563* rtc, int eepromSize)
-  : _apiKey(apiKey), _cityCode(cityCode), _rtc(rtc), _eepromSize(eepromSize), _eepromAddress(0), _updateIntervalSeconds(1800) {
+  : _apiKey(apiKey), _cityCode(cityCode), _rtc(rtc), _eepromSize(eepromSize), _eepromAddress(0), _updateIntervalSeconds(WEATHER_UPDATE_INTERVAL) {
   // 初始化默认天气信息
   initializeDefaultWeather();
 }

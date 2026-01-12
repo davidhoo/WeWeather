@@ -3,6 +3,7 @@
 #include <time.h>
 #include <Wire.h>
 #include <ESP8266mDNS.h>
+#include "../config.h"
 #include "../lib/BM8563/BM8563.h"
 #include "../lib/GDEY029T94/GDEY029T94.h"
 #include "../lib/WeatherManager/WeatherManager.h"
@@ -13,40 +14,23 @@
 #include "../lib/Fonts/Weather_Symbols_Regular9pt7b.h"
 #include "../lib/Fonts/DSEG7Modern_Bold28pt7b.h"
 
-// 深度睡眠相关定义
-#define DEEP_SLEEP_DURATION 60  // 1分钟深度睡眠（单位：秒）
-
-// I2C引脚定义 (根据用户提供的连接)
-#define SDA_PIN 2  // GPIO-2 (D4)
-#define SCL_PIN 12 // GPIO-12 (D6)
-
-// GDEY029T94 墨水屏引脚定义
-#define EPD_CS    D8
-#define EPD_DC    D2
-#define EPD_RST   D0
-#define EPD_BUSY  D1
-
 // 创建BM8563对象实例
-BM8563 rtc(SDA_PIN, SCL_PIN);
+BM8563 rtc(I2C_SDA_PIN, I2C_SCL_PIN);
 
 // 创建TimeManager对象实例
 TimeManager timeManager(&rtc);
 
 // 创建GDEY029T94对象实例
-GDEY029T94 epd(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
+GDEY029T94 epd(EPD_CS_PIN, EPD_DC_PIN, EPD_RST_PIN, EPD_BUSY_PIN);
 
 // 创建WiFiManager对象实例
 WiFiManager wifiManager;
 
-// 高德地图API配置
-const char* AMAP_API_KEY = "b4bed4011e9375d01423a45fba58e836";
-String cityCode = "110108";  // 北京海淀区，可根据需要修改
-
 // 创建WeatherManager对象实例
-WeatherManager weatherManager(AMAP_API_KEY, cityCode, &rtc, 512);
+WeatherManager weatherManager(AMAP_API_KEY, CITY_CODE, &rtc, 512);
 
 // 创建SHT40对象实例
-SHT40 sht40(SDA_PIN, SCL_PIN);
+SHT40 sht40(I2C_SDA_PIN, I2C_SCL_PIN);
 
 // 创建BatteryMonitor对象实例
 BatteryMonitor battery;
@@ -55,7 +39,7 @@ BatteryMonitor battery;
 void goToDeepSleep();
 
 void setup() {
-  Serial.begin(74880);
+  Serial.begin(SERIAL_BAUD_RATE);
   
   Serial.println("System starting up...");
   
@@ -71,7 +55,7 @@ void setup() {
   
   // 初始化GDEY029T94墨水屏
   epd.begin();
-  epd.setRotation(1); // 调整旋转以适应128x296分辨率
+  epd.setRotation(DISPLAY_ROTATION); // 使用配置文件中的旋转角度
   epd.setTimeFont(&DSEG7Modern_Bold28pt7b);
   epd.setWeatherSymbolFont(&Weather_Symbols_Regular9pt7b);
   
@@ -165,8 +149,8 @@ void goToDeepSleep() {
   rtc.clearAlarmFlag();
   Serial.println("RTC interrupt flags cleared");
   
-  // 设置RTC定时器，1分钟唤醒一次
-  rtc.setTimer(60, BM8563_TIMER_1HZ);
+  // 设置RTC定时器，使用配置文件中的时间
+  rtc.setTimer(RTC_TIMER_SECONDS, BM8563_TIMER_1HZ);
   
   // 启用定时器中断
   rtc.enableTimerInterrupt(true);
