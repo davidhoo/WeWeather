@@ -59,13 +59,13 @@ void initializeHardware() {
   Serial.begin(SERIAL_BAUD_RATE);
   Serial.println("System starting up...");
   
-  // 初始化各个管理器
+  // 初始化 WeatherManager
   weatherManager.begin();
-  timeManager.begin();
 }
 
 /**
  * @brief 初始化RTC时钟模块
+ * @note 必须在 TimeManager 初始化之前调用
  */
 void initializeRTC() {
   if (rtc.begin()) {
@@ -83,6 +83,9 @@ void initializeRTC() {
   } else {
     Serial.println("Failed to initialize BM8563 RTC");
   }
+  
+  // 初始化 TimeManager（必须在 RTC 初始化之后）
+  timeManager.begin();
 }
 
 /**
@@ -163,11 +166,7 @@ void handleConfigMode() {
 void updateWeatherData() {
   if (weatherManager.shouldUpdateFromNetwork()) {
     Serial.println("Weather data is outdated, updating from network...");
-    // 先更新 NTP 时间并写入 RTC
     timeManager.updateNTPTime();
-    // 等待确保 RTC 时间已写入
-    delay(200);
-    // 更新天气数据（此时 WeatherManager 会从 RTC 读取时间戳）
     weatherManager.updateWeather(true);
   } else {
     Serial.println("Weather data is recent, using cached data");
