@@ -58,6 +58,47 @@ void initializeTimeManager();
 void connectAndUpdateWiFi();
 void updateAndDisplay();
 
+// ==================== 日志辅助函数 ====================
+
+/**
+ * @brief 输出信息级别日志
+ * @param component 组件名称（使用 F() 宏）
+ * @param message 日志消息（使用 F() 宏）
+ * @note 字符串存储在 Flash 中以节省 RAM
+ */
+void logInfo(const __FlashStringHelper* component, const __FlashStringHelper* message) {
+  Serial.print(F("[INFO] "));
+  Serial.print(component);
+  Serial.print(F(": "));
+  Serial.println(message);
+}
+
+/**
+ * @brief 输出警告级别日志
+ * @param component 组件名称（使用 F() 宏）
+ * @param message 日志消息（使用 F() 宏）
+ * @note 字符串存储在 Flash 中以节省 RAM
+ */
+void logWarning(const __FlashStringHelper* component, const __FlashStringHelper* message) {
+  Serial.print(F("[WARN] "));
+  Serial.print(component);
+  Serial.print(F(": "));
+  Serial.println(message);
+}
+
+/**
+ * @brief 输出错误级别日志
+ * @param component 组件名称（使用 F() 宏）
+ * @param message 日志消息（使用 F() 宏）
+ * @note 字符串存储在 Flash 中以节省 RAM
+ */
+void logError(const __FlashStringHelper* component, const __FlashStringHelper* message) {
+  Serial.print(F("[ERROR] "));
+  Serial.print(component);
+  Serial.print(F(": "));
+  Serial.println(message);
+}
+
 // ==================== 初始化函数 ====================
 
 /**
@@ -66,7 +107,7 @@ void updateAndDisplay();
  */
 void initializeSerial() {
   Serial.begin(SERIAL_BAUD_RATE);
-  Serial.println("System starting up...");
+  logInfo(F("System"), F("Starting up..."));
 }
 
 /**
@@ -83,9 +124,9 @@ void initializeWeatherManager() {
  */
 void initializeSensors() {
   if (sht40.begin()) {
-    Serial.println("SHT40 initialized successfully");
+    logInfo(F("SHT40"), F("Initialized successfully"));
   } else {
-    Serial.println("Warning: SHT40 init failed, will use NAN values");
+    logWarning(F("SHT40"), F("Init failed, will use NAN values"));
   }
 }
 
@@ -106,13 +147,13 @@ void initializeDisplay() {
  */
 void initializeRTC() {
   if (rtc.begin()) {
-    Serial.println("BM8563 RTC initialized successfully");
+    logInfo(F("RTC"), F("BM8563 initialized successfully"));
     
     // 重置所有中断标志和禁用中断，防止INT引脚持续拉低
     rtc.resetInterrupts();
-    Serial.println("RTC interrupts reset");
+    logInfo(F("RTC"), F("Interrupts reset"));
   } else {
-    Serial.println("Error: Failed to initialize BM8563 RTC");
+    logError(F("RTC"), F("Failed to initialize BM8563"));
   }
 }
 
@@ -130,7 +171,7 @@ void initializeTimeManager() {
 void connectAndUpdateWiFi() {
   // 判断是否需要从网络更新天气
   if (weatherManager.shouldUpdateFromNetwork()) {
-    Serial.println("Weather data is outdated, updating from network...");
+    logInfo(F("Weather"), F("Data is outdated, updating from network..."));
     
     // 初始化WiFi连接（使用默认配置）
     wifiManager.begin();
@@ -141,11 +182,11 @@ void connectAndUpdateWiFi() {
       timeManager.updateNTPTime();
       weatherManager.updateWeather(true);
     } else {
-      Serial.println("WiFi connection failed, using cached data");
+      logWarning(F("WiFi"), F("Connection failed, using cached data"));
       timeManager.setWiFiConnected(false);
     }
   } else {
-    Serial.println("Weather data is recent, using cached data");
+    logInfo(F("Weather"), F("Data is recent, using cached data"));
   }
 }
 
@@ -161,10 +202,15 @@ void updateAndDisplay() {
   // 读取温湿度数据（一次性读取，避免重复测量）
   float temperature, humidity;
   if (sht40.readTemperatureHumidity(temperature, humidity)) {
-    Serial.println("Current Temperature: " + String(temperature) + " °C");
-    Serial.println("Current Humidity: " + String(humidity) + " %RH");
+    Serial.print(F("[INFO] SHT40: Temperature: "));
+    Serial.print(temperature);
+    Serial.println(F(" °C"));
+    
+    Serial.print(F("[INFO] SHT40: Humidity: "));
+    Serial.print(humidity);
+    Serial.println(F(" %RH"));
   } else {
-    Serial.println("Failed to read SHT40 sensor");
+    logWarning(F("SHT40"), F("Failed to read sensor"));
     temperature = NAN;
     humidity = NAN;
   }
@@ -176,11 +222,16 @@ void updateAndDisplay() {
   float batteryPercentage = battery.getBatteryPercentage();
   
   // 打印电池状态信息
-  Serial.println("=== 电池状态 ===");
-  Serial.println("原始 ADC 值: " + String(rawADC));
-  Serial.println("电池电压: " + String(batteryVoltage, 2) + " V");
-  Serial.println("电池电量: " + String(batteryPercentage, 1) + " %");
-  Serial.println("================");
+  Serial.print(F("[INFO] Battery: Raw ADC: "));
+  Serial.println(rawADC);
+  
+  Serial.print(F("[INFO] Battery: Voltage: "));
+  Serial.print(batteryVoltage, 2);
+  Serial.println(F(" V"));
+  
+  Serial.print(F("[INFO] Battery: Percentage: "));
+  Serial.print(batteryPercentage, 1);
+  Serial.println(F(" %"));
   
   // 更新墨水屏显示
   epd.showTimeDisplay(currentTime, currentWeather, temperature, humidity, batteryPercentage);
@@ -219,28 +270,29 @@ void loop() {
 
 /**
  * @brief 配置RTC定时器并进入深度睡眠
- * @note 深度睡眠流程：
- *       1. 使用setupWakeupTimer()配置RTC定时器（自动清除中断标志并启用定时器中断）
- *       2. 进入ESP8266深度睡眠模式
- *       3. RTC定时器到期后通过INT引脚触发硬件复位唤醒
- *       4. 唤醒后系统重启，从setup()重新开始执行
- */
-void goToDeepSleep() {
-  Serial.println("Setting up and entering deep sleep...");
-  
-  // 配置RTC唤醒定时器（使用config.h中的RTC_TIMER_SECONDS，默认60秒）
-  // 此方法会自动清除中断标志、设置定时器并启用中断
-  rtc.setupWakeupTimer(RTC_TIMER_SECONDS);
-  Serial.println("RTC wakeup timer configured");
-  
-  Serial.println("Entering deep sleep...");
-  Serial.flush(); // 确保串口数据发送完成
-  
-  // 短暂延时确保串口输出完成
-  delay(100);
-  
-  // 进入深度睡眠模式
-  // 参数0表示无限期睡眠，实际由RTC定时器通过INT引脚触发硬件复位唤醒
-  ESP.deepSleep(0);
-}
-
+ /**
+  * @brief 配置RTC定时器并进入深度睡眠
+  * @note 深度睡眠流程：
+  *       1. 使用setupWakeupTimer()配置RTC定时器（自动清除中断标志并启用定时器中断）
+  *       2. 进入ESP8266深度睡眠模式
+  *       3. RTC定时器到期后通过INT引脚触发硬件复位唤醒
+  *       4. 唤醒后系统重启，从setup()重新开始执行
+  */
+ void goToDeepSleep() {
+   logInfo(F("Power"), F("Setting up and entering deep sleep..."));
+   
+   // 配置RTC唤醒定时器（使用config.h中的RTC_TIMER_SECONDS，默认60秒）
+   // 此方法会自动清除中断标志、设置定时器并启用中断
+   rtc.setupWakeupTimer(RTC_TIMER_SECONDS);
+   logInfo(F("RTC"), F("Wakeup timer configured"));
+   
+   logInfo(F("Power"), F("Entering deep sleep..."));
+   Serial.flush(); // 确保串口数据发送完成
+   
+   // 短暂延时确保串口输出完成
+   delay(100);
+   
+   // 进入深度睡眠模式
+   // 参数0表示无限期睡眠，实际由RTC定时器通过INT引脚触发硬件复位唤醒
+   ESP.deepSleep(0);
+ }
