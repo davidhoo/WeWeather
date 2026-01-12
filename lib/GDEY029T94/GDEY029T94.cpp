@@ -266,25 +266,29 @@ void GDEY029T94::showConfigDisplay(const String& ssid, const String& ip, const S
     display.setCursor(10, 25);
     display.print("Config Mode");
     
+    // Config Mode 下方横线
+    display.drawLine(10, 32, display.width() - 10, 32, GxEPD_BLACK);
+    
     // WiFi信息
-    display.setCursor(10, 50);
+    display.setCursor(10, 55);
     display.print("WiFi: ");
     display.print(ssid);
     
     // IP地址
-    display.setCursor(10, 75);
+    display.setCursor(10, 80);
     display.print("IP: ");
     display.print(ip);
     
-    // 说明文字
-    display.setCursor(10, 100);
-    display.print("Open browser to");
-    display.setCursor(10, 125);
-    display.print("configure device");
+    // IP 下方横线
+    display.drawLine(10, 87, display.width() - 10, 87, GxEPD_BLACK);
+    
+    // 说明文字 - 简洁明了
+    display.setCursor(10, 110);
+    display.print("Connect WiFi, browse IP");
     
     // 可选消息
     if (message.length() > 0) {
-      display.setCursor(10, 150);
+      display.setCursor(10, 135);
       display.print(message);
     }
     
