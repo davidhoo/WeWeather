@@ -42,7 +42,7 @@
 #define DEFAULT_WIFI_PASSWORD "your_wifi_password"
 
 // 自定义 MAC 地址（可选）
-#define DEFAULT_MAC_ADDRESS "14:2B:2F:EC:0B:04"
+#define DEFAULT_MAC_ADDRESS "AA:BB:CC:DD:EE:FF"
 
 // WiFi 连接超时（毫秒）
 #define WIFI_CONNECT_TIMEOUT 30000  // 30秒
