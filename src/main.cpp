@@ -14,6 +14,7 @@
 #include <Wire.h>
 #include <ESP8266mDNS.h>
 #include "../config.h"
+#include "../lib/Logger/Logger.h"
 #include "../lib/BM8563/BM8563.h"
 #include "../lib/GDEY029T94/GDEY029T94.h"
 #include "../lib/WeatherManager/WeatherManager.h"
@@ -58,47 +59,6 @@ void initializeTimeManager();
 void connectAndUpdateWiFi();
 void updateAndDisplay();
 
-// ==================== 日志辅助函数 ====================
-
-/**
- * @brief 输出信息级别日志
- * @param component 组件名称（使用 F() 宏）
- * @param message 日志消息（使用 F() 宏）
- * @note 字符串存储在 Flash 中以节省 RAM
- */
-void logInfo(const __FlashStringHelper* component, const __FlashStringHelper* message) {
-  Serial.print(F("[INFO] "));
-  Serial.print(component);
-  Serial.print(F(": "));
-  Serial.println(message);
-}
-
-/**
- * @brief 输出警告级别日志
- * @param component 组件名称（使用 F() 宏）
- * @param message 日志消息（使用 F() 宏）
- * @note 字符串存储在 Flash 中以节省 RAM
- */
-void logWarning(const __FlashStringHelper* component, const __FlashStringHelper* message) {
-  Serial.print(F("[WARN] "));
-  Serial.print(component);
-  Serial.print(F(": "));
-  Serial.println(message);
-}
-
-/**
- * @brief 输出错误级别日志
- * @param component 组件名称（使用 F() 宏）
- * @param message 日志消息（使用 F() 宏）
- * @note 字符串存储在 Flash 中以节省 RAM
- */
-void logError(const __FlashStringHelper* component, const __FlashStringHelper* message) {
-  Serial.print(F("[ERROR] "));
-  Serial.print(component);
-  Serial.print(F(": "));
-  Serial.println(message);
-}
-
 // ==================== 初始化函数 ====================
 
 /**
@@ -106,8 +66,8 @@ void logError(const __FlashStringHelper* component, const __FlashStringHelper* m
  * @note ESP8266 ROM bootloader 使用 74880 波特率，保持一致便于查看启动信息
  */
 void initializeSerial() {
-  Serial.begin(SERIAL_BAUD_RATE);
-  logInfo(F("System"), F("Starting up..."));
+  Logger::begin(SERIAL_BAUD_RATE);
+  Logger::info(F("System"), F("Starting up..."));
 }
 
 /**
@@ -124,9 +84,9 @@ void initializeWeatherManager() {
  */
 void initializeSensors() {
   if (sht40.begin()) {
-    logInfo(F("SHT40"), F("Initialized successfully"));
+    Logger::info(F("SHT40"), F("Initialized successfully"));
   } else {
-    logWarning(F("SHT40"), F("Init failed, will use NAN values"));
+    Logger::warning(F("SHT40"), F("Init failed, will use NAN values"));
   }
 }
 
@@ -147,13 +107,13 @@ void initializeDisplay() {
  */
 void initializeRTC() {
   if (rtc.begin()) {
-    logInfo(F("RTC"), F("BM8563 initialized successfully"));
+    Logger::info(F("RTC"), F("BM8563 initialized successfully"));
     
     // 重置所有中断标志和禁用中断，防止INT引脚持续拉低
     rtc.resetInterrupts();
-    logInfo(F("RTC"), F("Interrupts reset"));
+    Logger::info(F("RTC"), F("Interrupts reset"));
   } else {
-    logError(F("RTC"), F("Failed to initialize BM8563"));
+    Logger::error(F("RTC"), F("Failed to initialize BM8563"));
   }
 }
 
@@ -169,9 +129,8 @@ void initializeTimeManager() {
  * @note 仅在需要更新天气数据时才连接WiFi以节省电量
  */
 void connectAndUpdateWiFi() {
-  // 判断是否需要从网络更新天气
   if (weatherManager.shouldUpdateFromNetwork()) {
-    logInfo(F("Weather"), F("Data is outdated, updating from network..."));
+    Logger::info(F("Weather"), F("Data is outdated, updating from network..."));
     
     // 初始化WiFi连接（使用默认配置）
     wifiManager.begin();
@@ -182,11 +141,11 @@ void connectAndUpdateWiFi() {
       timeManager.updateNTPTime();
       weatherManager.updateWeather(true);
     } else {
-      logWarning(F("WiFi"), F("Connection failed, using cached data"));
+      Logger::warning(F("WiFi"), F("Connection failed, using cached data"));
       timeManager.setWiFiConnected(false);
     }
   } else {
-    logInfo(F("Weather"), F("Data is recent, using cached data"));
+    Logger::info(F("Weather"), F("Data is recent, using cached data"));
   }
 }
 
@@ -202,15 +161,11 @@ void updateAndDisplay() {
   // 读取温湿度数据（一次性读取，避免重复测量）
   float temperature, humidity;
   if (sht40.readTemperatureHumidity(temperature, humidity)) {
-    Serial.print(F("[INFO] SHT40: Temperature: "));
-    Serial.print(temperature);
-    Serial.println(F(" °C"));
-    
-    Serial.print(F("[INFO] SHT40: Humidity: "));
-    Serial.print(humidity);
-    Serial.println(F(" %RH"));
+    // 使用 infoValue 方法输出带数值的日志，避免 String 拼接占用 RAM
+    Logger::infoValue(F("SHT40"), F("Temperature:"), temperature, F("°C"), 1);
+    Logger::infoValue(F("SHT40"), F("Humidity:"), humidity, F("%RH"), 1);
   } else {
-    logWarning(F("SHT40"), F("Failed to read sensor"));
+    Logger::warning(F("SHT40"), F("Failed to read sensor"));
     temperature = NAN;
     humidity = NAN;
   }
@@ -222,16 +177,9 @@ void updateAndDisplay() {
   float batteryPercentage = battery.getBatteryPercentage();
   
   // 打印电池状态信息
-  Serial.print(F("[INFO] Battery: Raw ADC: "));
-  Serial.println(rawADC);
-  
-  Serial.print(F("[INFO] Battery: Voltage: "));
-  Serial.print(batteryVoltage, 2);
-  Serial.println(F(" V"));
-  
-  Serial.print(F("[INFO] Battery: Percentage: "));
-  Serial.print(batteryPercentage, 1);
-  Serial.println(F(" %"));
+  Logger::infoValue(F("Battery"), F("Raw ADC:"), rawADC);
+  Logger::infoValue(F("Battery"), F("Voltage:"), batteryVoltage, F("V"), 2);
+  Logger::infoValue(F("Battery"), F("Percentage:"), batteryPercentage, F("%"), 1);
   
   // 更新墨水屏显示
   epd.showTimeDisplay(currentTime, currentWeather, temperature, humidity, batteryPercentage);
@@ -279,14 +227,14 @@ void loop() {
   *       4. 唤醒后系统重启，从setup()重新开始执行
   */
  void goToDeepSleep() {
-   logInfo(F("Power"), F("Setting up and entering deep sleep..."));
+   Logger::info(F("Power"), F("Setting up and entering deep sleep..."));
    
    // 配置RTC唤醒定时器（使用config.h中的RTC_TIMER_SECONDS，默认60秒）
    // 此方法会自动清除中断标志、设置定时器并启用中断
    rtc.setupWakeupTimer(RTC_TIMER_SECONDS);
-   logInfo(F("RTC"), F("Wakeup timer configured"));
+   Logger::info(F("RTC"), F("Wakeup timer configured"));
    
-   logInfo(F("Power"), F("Entering deep sleep..."));
+   Logger::info(F("Power"), F("Entering deep sleep..."));
    Serial.flush(); // 确保串口数据发送完成
    
    // 短暂延时确保串口输出完成
