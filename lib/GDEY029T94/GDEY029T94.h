@@ -31,6 +31,9 @@ public:
   // 设置天气符号字体
   void setWeatherSymbolFont(const GFXfont* font);
   
+  // 显示配置模式信息
+  void showConfigDisplay(const String& ssid, const String& ip, const String& message = "");
+  
   // 8像素对齐辅助函数
   int alignToPixel8(int x);
   

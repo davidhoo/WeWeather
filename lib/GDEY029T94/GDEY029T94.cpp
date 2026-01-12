@@ -254,3 +254,46 @@ void GDEY029T94::drawBatteryIcon(int x, int y, float percentage) {
   }
 }
 
+void GDEY029T94::showConfigDisplay(const String& ssid, const String& ip, const String& message) {
+  display.setFullWindow();
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    display.setTextColor(GxEPD_BLACK);
+    display.setFont(&FreeMonoBold9pt7b);
+    
+    // 标题
+    display.setCursor(10, 25);
+    display.print("Config Mode");
+    
+    // Config Mode 下方横线
+    display.drawLine(10, 32, display.width() - 10, 32, GxEPD_BLACK);
+    
+    // WiFi信息
+    display.setCursor(10, 55);
+    display.print("WiFi: ");
+    display.print(ssid);
+    
+    // IP地址
+    display.setCursor(10, 80);
+    display.print("IP: ");
+    display.print(ip);
+    
+    // IP 下方横线
+    display.drawLine(10, 87, display.width() - 10, 87, GxEPD_BLACK);
+    
+    // 说明文字 - 简洁明了
+    display.setCursor(10, 110);
+    display.print("Connect WiFi, browse IP");
+    
+    // 可选消息
+    if (message.length() > 0) {
+      display.setCursor(10, 135);
+      display.print(message);
+    }
+    
+  } while (display.nextPage());
+  
+  display.hibernate();
+}
+
