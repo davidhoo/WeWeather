@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
+#include "../Logger/Logger.h"
 
 // WiFi 配置结构体
 struct WiFiConfig {

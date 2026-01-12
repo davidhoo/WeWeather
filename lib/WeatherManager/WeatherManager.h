@@ -9,6 +9,7 @@
 #include <EEPROM.h>
 #include <time.h>
 #include "../BM8563/BM8563.h"
+#include "../Logger/Logger.h"
 
 // 天气信息结构体
 struct WeatherInfo {

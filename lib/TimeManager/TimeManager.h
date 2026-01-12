@@ -5,6 +5,7 @@
 #include <ESP8266WiFi.h>
 #include <time.h>
 #include "../BM8563/BM8563.h"
+#include "../Logger/Logger.h"
 // 日期时间结构体
 struct DateTime {
   int year;

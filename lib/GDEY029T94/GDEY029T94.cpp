@@ -21,29 +21,24 @@ void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo&
   String weatherStr = WeatherManager::getWeatherInfo(currentWeather);
   
   // 调试输出移到循环外部，避免重复打印
-  Serial.print("Temperature: ");
-  Serial.print(temperature);
-  Serial.print(", Humidity: ");
-  Serial.println(humidity);
-  
+  Logger::infoValue(F("Display"), F("Temperature:"), temperature, F("°C"), 1);
+  Logger::infoValue(F("Display"), F("Humidity:"), humidity, F("%RH"), 1);
+
   if (!isnan(temperature) && !isnan(humidity)) {
-    Serial.println("Displaying temperature and humidity...");
+    Logger::debug(F("Display"), F("Displaying temperature and humidity..."));
     
     // 准备温度和湿度字符串
     char tempStr[16];
     char humStr[16];
     snprintf(tempStr, sizeof(tempStr), "%.0fC", temperature);
-    snprintf(humStr, sizeof(humStr), "%.0f%% ", humidity);
-    
-    Serial.print("Temp string: ");
-    Serial.println(tempStr);
-    Serial.print("Hum string: ");
-    Serial.println(humStr);
+    snprintf(humStr, sizeof(humStr), "%.0f%%", humidity);
+
+    Logger::debug(F("Display"), ("Temp string: " + String(tempStr)).c_str());
+    Logger::debug(F("Display"), ("Hum string: " + String(humStr)).c_str());
   }
-  
+
   if (!isnan(batteryPercentage)) {
-    Serial.print("Battery percentage: ");
-    Serial.println(batteryPercentage);
+    Logger::infoValue(F("Display"), F("Battery:"), batteryPercentage, F("%"), 1);
   }
   
   display.setFullWindow();
@@ -163,23 +158,20 @@ void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo&
     
   } while (display.nextPage());
   
-  // 在循环外部输出完成信息
   if (!isnan(temperature) && !isnan(humidity)) {
-    Serial.print("Temp position: X=");
-    Serial.print(alignToPixel8(display.width() - 10));
-    Serial.print(", Y=55");
-    Serial.print("Hum position: X=");
-    Serial.print(alignToPixel8(display.width() - 10));
-    Serial.println(", Y=75");
-    Serial.println("Temperature and humidity displayed");
+    char buffer[64];
+    snprintf(buffer, sizeof(buffer), "Temp pos: X=%d, Y=55; Hum pos: X=%d, Y=75",
+             alignToPixel8(display.width() - 10), alignToPixel8(display.width() - 10));
+    Logger::debug(F("Display"), buffer);
+    Logger::debug(F("Display"), F("Temperature and humidity displayed"));
   } else {
-    Serial.println("Temperature or humidity is NaN, not displaying");
+    Logger::debug(F("Display"), F("Temperature or humidity is NaN, not displaying"));
   }
-  
+
   if (!isnan(batteryPercentage)) {
-    Serial.println("Battery icon displayed");
+    Logger::debug(F("Display"), F("Battery icon displayed"));
   } else {
-    Serial.println("Battery percentage is NaN, not displaying");
+    Logger::debug(F("Display"), F("Battery percentage is NaN, not displaying"));
   }
   
   display.hibernate();
