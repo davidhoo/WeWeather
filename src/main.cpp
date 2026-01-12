@@ -14,27 +14,14 @@
 #include "../lib/Fonts/Weather_Symbols_Regular9pt7b.h"
 #include "../lib/Fonts/DSEG7Modern_Bold28pt7b.h"
 
-// 深度睡眠相关定义
-#define DEEP_SLEEP_DURATION 60  // 1分钟深度睡眠（单位：秒）
-
-// I2C引脚定义 (根据用户提供的连接)
-#define SDA_PIN 2  // GPIO-2 (D4)
-#define SCL_PIN 12 // GPIO-12 (D6)
-
-// GDEY029T94 墨水屏引脚定义
-#define EPD_CS    D8
-#define EPD_DC    D2
-#define EPD_RST   D0
-#define EPD_BUSY  D1
-
-// 创建BM8563对象实例
-BM8563 rtc(SDA_PIN, SCL_PIN);
+// 创建BM8563对象实例（使用config.h中的I2C引脚配置）
+BM8563 rtc(I2C_SDA_PIN, I2C_SCL_PIN);
 
 // 创建TimeManager对象实例
 TimeManager timeManager(&rtc);
 
-// 创建GDEY029T94对象实例
-GDEY029T94 epd(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
+// 创建GDEY029T94对象实例（使用config.h中的墨水屏引脚配置）
+GDEY029T94 epd(EPD_CS_PIN, EPD_DC_PIN, EPD_RST_PIN, EPD_BUSY_PIN);
 
 // 创建WiFiManager对象实例
 WiFiManager wifiManager;
@@ -46,8 +33,8 @@ String cityCode = CITY_CODE;
 // 创建WeatherManager对象实例
 WeatherManager weatherManager(amapApiKey, cityCode, &rtc, 512);
 
-// 创建SHT40对象实例
-SHT40 sht40(SDA_PIN, SCL_PIN);
+// 创建SHT40对象实例（使用config.h中的I2C引脚配置）
+SHT40 sht40(I2C_SDA_PIN, I2C_SCL_PIN);
 
 // 创建BatteryMonitor对象实例
 BatteryMonitor battery;
@@ -56,7 +43,8 @@ BatteryMonitor battery;
 void goToDeepSleep();
 
 void setup() {
-  Serial.begin(74880);
+  // ESP8266 ROM bootloader 使用 74880 波特率，保持一致便于查看启动信息
+  Serial.begin(SERIAL_BAUD_RATE);
   
   Serial.println("System starting up...");
   
@@ -72,7 +60,8 @@ void setup() {
   
   // 初始化GDEY029T94墨水屏
   epd.begin();
-  epd.setRotation(1); // 调整旋转以适应128x296分辨率
+  // 旋转显示以适应 128x296 分辨率的横向显示
+  epd.setRotation(DISPLAY_ROTATION);
   epd.setTimeFont(&DSEG7Modern_Bold28pt7b);
   epd.setWeatherSymbolFont(&Weather_Symbols_Regular9pt7b);
   
@@ -179,19 +168,17 @@ void loop() {
 
 }
 
-
-
 // 设置并进入深度睡眠
 void goToDeepSleep() {
   Serial.println("Setting up and entering deep sleep...");
   
-  // 清除之前的定时器标志和闹钟标志
+  // 清除之前的定时器标志和闹钟标志，防止 INT 引脚持续拉低
   rtc.clearTimerFlag();
   rtc.clearAlarmFlag();
   Serial.println("RTC interrupt flags cleared");
   
-  // 设置RTC定时器，1分钟唤醒一次
-  rtc.setTimer(60, BM8563_TIMER_1HZ);
+  // 设置RTC定时器唤醒时间（使用config.h中的配置）
+  rtc.setTimer(RTC_TIMER_SECONDS, BM8563_TIMER_1HZ);
   
   // 启用定时器中断
   rtc.enableTimerInterrupt(true);
@@ -203,7 +190,8 @@ void goToDeepSleep() {
   // 等待串口输出完成
   delay(100);
   
-  // 进入深度睡眠，由RTC定时器唤醒
-  ESP.deepSleep(0); // 0表示无限期睡眠，直到外部复位
+  // 进入深度睡眠，参数 0 表示无限期睡眠直到外部唤醒
+  // 实际唤醒由 RTC 定时器触发硬件复位实现
+  ESP.deepSleep(0);
 }
 
