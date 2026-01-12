@@ -223,11 +223,7 @@ void GDEY029T94::showWebConfigInfo(const String& ssid, const String& ip) {
     // 访问提示
     int hintY = bottomLineY + 25;
     display.setCursor(alignToPixel8(10), hintY);
-    display.print("Connect WiFi &");
-    
-    int hint2Y = hintY + 20;
-    display.setCursor(alignToPixel8(10), hint2Y);
-    display.print("browse IP");
+    display.print("Connect WiFi and browse IP");
     
   } while (display.nextPage());
   
