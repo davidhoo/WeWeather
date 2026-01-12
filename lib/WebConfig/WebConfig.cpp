@@ -229,8 +229,8 @@ String WebConfig::_generateConfigPage() {
   // WiFi 密码
   html += "<div class='form-group'>";
   html += "<label>WiFi 密码</label>";
-  html += "<input type='password' name='password' value=''>";
-  html += "<div class='hint'>WiFi 网络密码（留空保持不变）</div>";
+  html += "<input type='text' name='password' value='" + _htmlEncode(String(config.password)) + "'>";
+  html += "<div class='hint'>WiFi 网络密码</div>";
   html += "</div>";
   
   // MAC 地址
@@ -314,9 +314,9 @@ String WebConfig::_generateStatusPage() {
   html += "<tr><th>配置项</th><th>值</th></tr>";
   html += "<tr><td>已配置</td><td>" + String(config.isConfigured ? "是" : "否") + "</td></tr>";
   html += "<tr><td>WiFi SSID</td><td>" + _htmlEncode(String(config.ssid[0] ? config.ssid : "未设置")) + "</td></tr>";
-  html += "<tr><td>WiFi 密码</td><td>" + String(config.password[0] ? "已设置" : "未设置") + "</td></tr>";
+  html += "<tr><td>WiFi 密码</td><td>" + _htmlEncode(String(config.password[0] ? config.password : "未设置")) + "</td></tr>";
   html += "<tr><td>MAC 地址</td><td>" + _htmlEncode(String(config.macAddress[0] ? config.macAddress : "未设置")) + "</td></tr>";
-  html += "<tr><td>API Key</td><td>" + String(config.amapApiKey[0] ? "已设置" : "未设置") + "</td></tr>";
+  html += "<tr><td>API Key</td><td>" + _htmlEncode(String(config.amapApiKey[0] ? config.amapApiKey : "未设置")) + "</td></tr>";
   html += "<tr><td>城市代码</td><td>" + _htmlEncode(String(config.cityCode[0] ? config.cityCode : "未设置")) + "</td></tr>";
   html += "</table>";
   html += "<div class='back-link'><a href='/'>返回配置页面</a></div>";
