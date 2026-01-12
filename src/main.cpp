@@ -50,10 +50,11 @@ BatteryMonitor battery;
 // ==================== 函数声明 ====================
 void goToDeepSleep();
 void initializeSerial();
-void initializeManagers();
+void initializeWeatherManager();
 void initializeSensors();
 void initializeDisplay();
 void initializeRTC();
+void initializeTimeManager();
 void connectAndUpdateWiFi();
 void updateAndDisplay();
 
@@ -69,12 +70,11 @@ void initializeSerial() {
 }
 
 /**
- * @brief 初始化管理器模块
- * @note 必须在硬件初始化之后调用
+ * @brief 初始化WeatherManager
+ * @note 负责天气数据的获取和缓存管理
  */
-void initializeManagers() {
+void initializeWeatherManager() {
   weatherManager.begin();
-  timeManager.begin();
 }
 
 /**
@@ -122,6 +122,13 @@ void initializeRTC() {
   }
 }
 
+/**
+ * @brief 初始化TimeManager
+ * @note 必须在RTC初始化之后调用，用于从RTC读取时间
+ */
+void initializeTimeManager() {
+  timeManager.begin();
+}
 /**
  * @brief 连接WiFi并更新网络数据
  * @note 仅在需要更新天气数据时才连接WiFi以节省电量
@@ -188,22 +195,24 @@ void updateAndDisplay() {
 // ==================== 主程序 ====================
 
 /**
- * @brief 系统初始化和主流程
- * @note 执行顺序：串口 -> 管理器 -> 传感器 -> 显示 -> RTC -> WiFi -> 数据采集 -> 睡眠
- */
-void setup() {
-  initializeSerial();
-  initializeManagers();
-  initializeSensors();
-  initializeDisplay();
-  initializeRTC();
-  
-  connectAndUpdateWiFi();
-  updateAndDisplay();
-  
-  goToDeepSleep();
-}
-
+ /**
+  * @brief 系统初始化和主流程
+  * @note 执行顺序：串口 -> WeatherManager -> 传感器 -> 显示 -> RTC -> TimeManager -> WiFi -> 数据采集 -> 睡眠
+  *       关键：TimeManager.begin() 必须在 RTC 初始化之后调用
+  */
+ void setup() {
+   initializeSerial();
+   initializeWeatherManager();
+   initializeSensors();
+   initializeDisplay();
+   initializeRTC();
+   initializeTimeManager();
+   
+   connectAndUpdateWiFi();
+   updateAndDisplay();
+   
+   goToDeepSleep();
+ }
 /**
  * @brief 主循环函数
  * @note 本项目使用深度睡眠模式，不使用loop()函数
