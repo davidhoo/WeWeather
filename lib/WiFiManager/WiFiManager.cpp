@@ -1,4 +1,5 @@
 #include "WiFiManager.h"
+#include "../../config.h"
 
 extern "C" {
 #include "user_interface.h"
@@ -27,13 +28,13 @@ void WiFiManager::begin(const WiFiConfig& config) {
 }
 
 void WiFiManager::setDefaultConfig() {
-  // 设置默认的 WiFi 配置
-  _copyString(_config.ssid, "Sina Plaza Office", sizeof(_config.ssid));
-  _copyString(_config.password, "urtheone", sizeof(_config.password));
+  // 设置默认的 WiFi 配置（从config.h读取）
+  _copyString(_config.ssid, DEFAULT_WIFI_SSID, sizeof(_config.ssid));
+  _copyString(_config.password, DEFAULT_WIFI_PASSWORD, sizeof(_config.password));
   _config.timeout = 10000; // 10秒超时
   _config.autoReconnect = true;
   _config.maxRetries = 3;
-  _copyString(_config.macAddress, "14:2B:2F:EC:0B:04", sizeof(_config.macAddress));
+  _copyString(_config.macAddress, DEFAULT_MAC_ADDRESS, sizeof(_config.macAddress));
   _config.useMacAddress = true; // 默认启用自定义MAC地址
 }
 

@@ -1,0 +1,14 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+// 高德地图API配置
+// 请在 https://lbs.amap.com/ 申请API密钥
+#define AMAP_API_KEY "your_amap_api_key_here"
+#define CITY_CODE "110108"  // 城市代码，例如：110108为北京海淀区
+
+// WiFi默认配置
+#define DEFAULT_WIFI_SSID "your_wifi_ssid"
+#define DEFAULT_WIFI_PASSWORD "your_wifi_password"
+#define DEFAULT_MAC_ADDRESS "AA:BB:CC:DD:EE:FF"  // 自定义MAC地址（可选）
+
+#endif // CONFIG_H
