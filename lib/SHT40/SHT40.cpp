@@ -5,17 +5,26 @@ SHT40::SHT40(uint8_t sda_pin, uint8_t scl_pin, uint8_t addr)
 }
 
 bool SHT40::begin() {
-    // 初始化I2C
-    Wire.begin(_sda_pin, _scl_pin);
+    // 不再调用 Wire.begin()，因为 I2C 总线已经被其他设备（如 RTC）初始化
+    // 如果需要初始化 I2C，应该在主程序中统一初始化一次
     
     // 检查传感器是否响应
     Wire.beginTransmission(_addr);
     if (Wire.endTransmission() != 0) {
+        Serial.println("SHT40: 传感器未响应，I2C地址: 0x" + String(_addr, HEX));
         return false;
     }
     
+    Serial.println("SHT40: 传感器响应成功");
+    
     // 执行软件复位
-    return softReset();
+    if (!softReset()) {
+        Serial.println("SHT40: 软件复位失败");
+        return false;
+    }
+    
+    Serial.println("SHT40: 初始化成功");
+    return true;
 }
 
 bool SHT40::readTemperatureHumidity(float &temperature, float &humidity) {
