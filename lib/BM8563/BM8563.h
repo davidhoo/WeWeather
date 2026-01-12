@@ -93,7 +93,6 @@ public:
     bool getAlarmFlag();
     void clearAlarmFlag();
     void enableAlarmInterrupt(bool enable);
-    
     // 定时器功能
     bool setTimer(uint8_t timer_value, uint8_t timer_freq);
     bool clearTimer();
@@ -101,6 +100,11 @@ public:
     void clearTimerFlag();
     void enableTimerInterrupt(bool enable);
     
+    // 辅助功能
+    void resetInterrupts();
+    void setupWakeupTimer(uint16_t seconds);
+    
+    // CLKOUT功能
     // CLKOUT功能
     void setCLKOUTFrequency(uint8_t freq);
     void enableCLKOUT(bool enable);

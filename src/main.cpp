@@ -108,15 +108,9 @@ void initializeRTC() {
   if (rtc.begin()) {
     Serial.println("BM8563 RTC initialized successfully");
     
-    // 清除RTC中断标志，防止INT引脚持续拉低
-    rtc.clearTimerFlag();
-    rtc.clearAlarmFlag();
-    Serial.println("RTC interrupt flags cleared");
-    
-    // 确保中断被禁用
-    rtc.enableTimerInterrupt(false);
-    rtc.enableAlarmInterrupt(false);
-    Serial.println("RTC interrupts disabled");
+    // 重置所有中断标志和禁用中断，防止INT引脚持续拉低
+    rtc.resetInterrupts();
+    Serial.println("RTC interrupts reset");
   } else {
     Serial.println("Error: Failed to initialize BM8563 RTC");
   }
@@ -226,26 +220,18 @@ void loop() {
 /**
  * @brief 配置RTC定时器并进入深度睡眠
  * @note 深度睡眠流程：
- *       1. 清除RTC中断标志，防止立即唤醒
- *       2. 配置RTC定时器（使用config.h中的RTC_TIMER_SECONDS）
- *       3. 启用定时器中断
- *       4. 进入ESP8266深度睡眠模式
- *       5. RTC定时器到期后通过INT引脚触发硬件复位唤醒
+ *       1. 使用setupWakeupTimer()配置RTC定时器（自动清除中断标志并启用定时器中断）
+ *       2. 进入ESP8266深度睡眠模式
+ *       3. RTC定时器到期后通过INT引脚触发硬件复位唤醒
+ *       4. 唤醒后系统重启，从setup()重新开始执行
  */
 void goToDeepSleep() {
   Serial.println("Setting up and entering deep sleep...");
   
-  // 清除之前的定时器标志和闹钟标志，防止INT引脚持续拉低
-  rtc.clearTimerFlag();
-  rtc.clearAlarmFlag();
-  Serial.println("RTC interrupt flags cleared");
-  
-  // 设置RTC定时器，使用配置文件中的时间（默认60秒）
-  rtc.setTimer(RTC_TIMER_SECONDS, BM8563_TIMER_1HZ);
-  
-  // 启用定时器中断，定时器到期时INT引脚拉低触发唤醒
-  rtc.enableTimerInterrupt(true);
-  Serial.println("Timer interrupt enabled");
+  // 配置RTC唤醒定时器（使用config.h中的RTC_TIMER_SECONDS，默认60秒）
+  // 此方法会自动清除中断标志、设置定时器并启用中断
+  rtc.setupWakeupTimer(RTC_TIMER_SECONDS);
+  Serial.println("RTC wakeup timer configured");
   
   Serial.println("Entering deep sleep...");
   Serial.flush(); // 确保串口数据发送完成
@@ -255,7 +241,6 @@ void goToDeepSleep() {
   
   // 进入深度睡眠模式
   // 参数0表示无限期睡眠，实际由RTC定时器通过INT引脚触发硬件复位唤醒
-  // 唤醒后系统重启，从setup()重新开始执行
   ESP.deepSleep(0);
 }
 
