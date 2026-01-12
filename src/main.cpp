@@ -91,6 +91,9 @@ void setup() {
     Serial.println("警告: RTC 初始化失败");
   }
   
+  // 初始化 ConfigManager（只初始化一次）
+  configManager.begin();
+  
   // 检查 RXD 引脚状态，判断是否进入 Web 配置模式
   pinMode(RXD_PIN, INPUT_PULLUP);
   delay(100); // 等待引脚稳定
@@ -102,9 +105,6 @@ void setup() {
     Serial.println("  检测到 RXD 被拉低");
     Serial.println("  进入 Web 配置模式");
     Serial.println("=================================\n");
-    
-    // 初始化 ConfigManager
-    configManager.begin();
     
     // 初始化墨水屏
     epd.begin();
@@ -131,9 +131,6 @@ void setup() {
       // 继续正常启动流程
     }
   }
-  
-  // 初始化 ConfigManager
-  configManager.begin();
   
   // 初始化 ConfigSerial
   serialConfig.begin(74880);
