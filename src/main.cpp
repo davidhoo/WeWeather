@@ -39,33 +39,35 @@ SHT40 sht40(I2C_SDA_PIN, I2C_SCL_PIN);
 // 创建BatteryMonitor对象实例
 BatteryMonitor battery;
 
-// 深度睡眠相关函数声明
+// 函数声明
+void initializeHardware();
+void initializeRTC();
+void initializeDisplay();
+void initializeSensors();
+bool handleWiFiConnection();
+void handleConfigMode();
+void updateWeatherData();
+void readSensorData(float& temperature, float& humidity);
+void readBatteryStatus(float& batteryPercentage);
+void updateDisplay();
 void goToDeepSleep();
 
-void setup() {
-  // ESP8266 ROM bootloader 使用 74880 波特率，保持一致便于查看启动信息
+/**
+ * @brief 初始化硬件设备
+ */
+void initializeHardware() {
   Serial.begin(SERIAL_BAUD_RATE);
-  
   Serial.println("System starting up...");
   
-  // 初始化WeatherManager
+  // 初始化各个管理器
   weatherManager.begin();
-  
-  // 初始化SHT40温湿度传感器
-  if (sht40.begin()) {
-    Serial.println("SHT40 initialized successfully");
-  } else {
-    Serial.println("Failed to initialize SHT40");
-  }
-  
-  // 初始化GDEY029T94墨水屏
-  epd.begin();
-  // 旋转显示以适应 128x296 分辨率的横向显示
-  epd.setRotation(DISPLAY_ROTATION);
-  epd.setTimeFont(&DSEG7Modern_Bold28pt7b);
-  epd.setWeatherSymbolFont(&Weather_Symbols_Regular9pt7b);
-  
-  // 初始化BM8563 RTC
+  timeManager.begin();
+}
+
+/**
+ * @brief 初始化RTC时钟模块
+ */
+void initializeRTC() {
   if (rtc.begin()) {
     Serial.println("BM8563 RTC initialized successfully");
     
@@ -81,60 +83,99 @@ void setup() {
   } else {
     Serial.println("Failed to initialize BM8563 RTC");
   }
+}
+
+/**
+ * @brief 初始化墨水屏显示
+ */
+void initializeDisplay() {
+  epd.begin();
+  epd.setRotation(DISPLAY_ROTATION);
+  epd.setTimeFont(&DSEG7Modern_Bold28pt7b);
+  epd.setWeatherSymbolFont(&Weather_Symbols_Regular9pt7b);
+  Serial.println("Display initialized successfully");
+}
+
+/**
+ * @brief 初始化传感器
+ */
+void initializeSensors() {
+  // 初始化SHT40温湿度传感器
+  if (sht40.begin()) {
+    Serial.println("SHT40 initialized successfully");
+  } else {
+    Serial.println("Failed to initialize SHT40");
+  }
   
-  // 初始化TimeManager并从RTC读取时间
-  timeManager.begin();
-  
-  // 初始化WiFi连接（使用智能连接）
+  // 初始化电池监控
+  battery.begin();
+  Serial.println("Battery monitor initialized");
+}
+
+/**
+ * @brief 处理WiFi连接
+ * @return true 如果WiFi连接成功，false 如果进入配网模式或连接失败
+ */
+bool handleWiFiConnection() {
   wifiManager.begin();
-  
-  // 使用智能连接功能
   bool wifiConnected = wifiManager.smartConnect();
   
   if (wifiConnected && !wifiManager.isConfigMode()) {
-    // WiFi连接成功，正常模式
     Serial.println("WiFi connected successfully");
     timeManager.setWiFiConnected(true);
-    
-    // 判断是否需要从网络更新天气
-    if (weatherManager.shouldUpdateFromNetwork()) {
-      Serial.println("Weather data is outdated, updating from network...");
-      timeManager.updateNTPTime();
-      weatherManager.updateWeather(true);
-    } else {
-      Serial.println("Weather data is recent, using cached data");
-    }
+    return true;
   } else if (wifiManager.isConfigMode()) {
-    // 进入配网模式
-    Serial.println("Entered config mode");
-    
-    // 在屏幕显示配网信息
-    String apName = wifiManager.getConfigPortalSSID();
-    String ipAddress = wifiManager.getConfigPortalIP();
-    epd.showConfigPortalInfo(apName, ipAddress);
-    
-    // 进入配网处理循环
-    Serial.println("Entering config portal loop...");
-    while (wifiManager.isConfigMode()) {
-      wifiManager.handleConfigPortal();
-      delay(100);
-    }
-    
-    // 配网完成后会自动重启，这里不应该到达
-    Serial.println("Config mode ended, restarting...");
-    ESP.restart();
+    handleConfigMode();
+    return false;
   } else {
-    // WiFi连接失败，使用缓存数据
     Serial.println("WiFi connection failed, using cached data");
     timeManager.setWiFiConnected(false);
+    return false;
+  }
+}
+
+/**
+ * @brief 处理配网模式
+ */
+void handleConfigMode() {
+  Serial.println("Entered config mode");
+  
+  // 在屏幕显示配网信息
+  String apName = wifiManager.getConfigPortalSSID();
+  String ipAddress = wifiManager.getConfigPortalIP();
+  epd.showConfigPortalInfo(apName, ipAddress);
+  
+  // 进入配网处理循环
+  Serial.println("Entering config portal loop...");
+  while (wifiManager.isConfigMode()) {
+    wifiManager.handleConfigPortal();
+    delay(100);
   }
   
-  // 获取当前天气信息并显示
-  WeatherInfo currentWeather = weatherManager.getCurrentWeather();
-  DateTime currentTime = timeManager.getCurrentTime();
-  
-  // 读取温湿度数据（一次性读取，避免重复测量）
-  float temperature, humidity;
+  // 配网完成后会自动重启
+  Serial.println("Config mode ended, restarting...");
+  ESP.restart();
+}
+
+/**
+ * @brief 更新天气数据
+ */
+void updateWeatherData() {
+  if (weatherManager.shouldUpdateFromNetwork()) {
+    Serial.println("Weather data is outdated, updating from network...");
+    timeManager.updateNTPTime();
+    weatherManager.updateWeather(true);
+  } else {
+    Serial.println("Weather data is recent, using cached data");
+  }
+}
+
+/**
+ * @brief 读取传感器数据
+ * @param temperature 温度输出参数
+ * @param humidity 湿度输出参数
+ */
+void readSensorData(float& temperature, float& humidity) {
   if (sht40.readTemperatureHumidity(temperature, humidity)) {
     Serial.println("Current Temperature: " + String(temperature) + " °C");
     Serial.println("Current Humidity: " + String(humidity) + " %RH");
@@ -143,23 +184,61 @@ void setup() {
     temperature = NAN;
     humidity = NAN;
   }
-  
-  
-  // 初始化并读取电池状态
-  battery.begin();
+}
+
+/**
+ * @brief 读取电池状态
+ * @param batteryPercentage 电池电量百分比输出参数
+ */
+void readBatteryStatus(float& batteryPercentage) {
   int rawADC = battery.getRawADC();
   float batteryVoltage = battery.getBatteryVoltage();
-  float batteryPercentage = battery.getBatteryPercentage();
+  batteryPercentage = battery.getBatteryPercentage();
   
-  // 打印电池状态信息
   Serial.println("=== 电池状态 ===");
   Serial.println("原始 ADC 值: " + String(rawADC));
   Serial.println("电池电压: " + String(batteryVoltage, 2) + " V");
   Serial.println("电池电量: " + String(batteryPercentage, 1) + " %");
   Serial.println("================");
-  
+}
 
+/**
+ * @brief 更新显示内容
+ */
+void updateDisplay() {
+  WeatherInfo currentWeather = weatherManager.getCurrentWeather();
+  DateTime currentTime = timeManager.getCurrentTime();
+  
+  float temperature, humidity;
+  readSensorData(temperature, humidity);
+  
+  float batteryPercentage;
+  readBatteryStatus(batteryPercentage);
+  
   epd.showTimeDisplay(currentTime, currentWeather, temperature, humidity, batteryPercentage);
+}
+
+/**
+ * @brief 主设置函数
+ */
+void setup() {
+  // 初始化硬件和传感器
+  initializeHardware();
+  initializeRTC();
+  initializeDisplay();
+  initializeSensors();
+  
+  // 处理WiFi连接
+  bool wifiConnected = handleWiFiConnection();
+  
+  // 如果WiFi连接成功，更新天气数据
+  if (wifiConnected) {
+    updateWeatherData();
+  }
+  
+  // 更新显示
+  updateDisplay();
+  
   // 进入深度睡眠
   goToDeepSleep();
 }
