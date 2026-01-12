@@ -6,6 +6,7 @@
 #include <GxEPD2_3C.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
 #include "../TimeManager/TimeManager.h"
+#include "../Logger/Logger.h"
 
 // 前向声明 WeatherInfo 结构体（在 WeatherManager.h 中定义）
 struct WeatherInfo;

@@ -9,11 +9,11 @@ WeatherManager::WeatherManager(const char* apiKey, const String& cityCode, BM856
 
 void WeatherManager::begin() {
   EEPROM.begin(_eepromSize);
-  Serial.println("WeatherManager initialized");
-  
-  // 尝试从EEPROM读取天气信息
+  Logger::info(F("WeatherManager"), F("Initialized"));
+
+  // 尝试从EEPROM读取天气数据
   if (!readWeatherFromStorage()) {
-    Serial.println("Using default weather values");
+    Logger::info(F("WeatherManager"), F("Using default weather values"));
   }
 }
 
@@ -23,16 +23,16 @@ WeatherInfo WeatherManager::getCurrentWeather() {
 
 bool WeatherManager::updateWeather(bool forceUpdate) {
   if (forceUpdate || shouldUpdateFromNetwork()) {
-    Serial.println("Updating weather from network...");
+    Logger::info(F("WeatherManager"), F("Updating weather from network..."));
     if (fetchWeatherFromNetwork()) {
       writeWeatherToStorage();
       return true;
     } else {
-      Serial.println("Failed to fetch weather from network, using cached data");
+      Logger::warning(F("WeatherManager"), F("Failed to fetch weather from network, using cached data"));
       return false;
     }
   } else {
-    Serial.println("Using cached weather data");
+    Logger::info(F("WeatherManager"), F("Using cached weather data"));
     return true;
   }
 }
@@ -42,7 +42,7 @@ bool WeatherManager::shouldUpdateFromNetwork() {
   
   // 如果从未更新过，应该更新
   if (lastUpdateTime == 0) {
-    Serial.println("No previous weather data, need to update from network");
+    Logger::info(F("WeatherManager"), F("No previous weather data, need to update from network"));
     return true;
   }
   
@@ -50,7 +50,7 @@ bool WeatherManager::shouldUpdateFromNetwork() {
   
   // 如果无法获取当前时间，需要更新
   if (currentTime == 0 || currentTime == 1 || currentTime == (time_t)-1) {
-    Serial.println("Cannot get current time, need to update from network");
+    Logger::warning(F("WeatherManager"), F("Cannot get current time, need to update from network"));
     return true;
   }
   
@@ -58,19 +58,15 @@ bool WeatherManager::shouldUpdateFromNetwork() {
   unsigned long timeDiffSeconds = currentTime - lastUpdateTime;
   
   // 检查是否超过了更新间隔
-  bool shouldUpdate = timeDiffSeconds >= _updateIntervalSeconds;
-  
-  Serial.print("Current Unix time: ");
-  Serial.print(currentTime);
-  Serial.print(", Last update: ");
-  Serial.print(lastUpdateTime);
-  Serial.print(", Diff: ");
-  Serial.print(timeDiffSeconds);
-  Serial.print(" seconds (");
-  Serial.print(timeDiffSeconds / 60);
-  Serial.print(" minutes), ");
-  Serial.println(shouldUpdate ? "need to update from network" : "using cached data");
-  
+  bool shouldUpdate = (timeDiffSeconds >= _updateIntervalSeconds);
+
+  char buffer[128];
+  snprintf(buffer, sizeof(buffer),
+           "Current: %lu, Last: %lu, Diff: %lu sec (%lu min), %s",
+           (unsigned long)currentTime, lastUpdateTime, timeDiffSeconds, timeDiffSeconds / 60,
+           shouldUpdate ? "need update" : "using cache");
+  Logger::debug("WeatherManager", buffer);
+
   return shouldUpdate;
 }
 
@@ -81,7 +77,7 @@ bool WeatherManager::fetchWeatherFromNetwork() {
   // API URL
   String url = "https://restapi.amap.com/v3/weather/weatherInfo?key=" + String(_apiKey) + "&city=" + _cityCode + "&extensions=base&output=JSON";
   
-  Serial.println("Fetching weather data from: " + url);
+  Logger::info("WeatherManager", ("Fetching weather data from: " + url).c_str());
   
   client.setInsecure(); // 跳过SSL证书验证
   http.begin(client, url);
@@ -91,22 +87,24 @@ bool WeatherManager::fetchWeatherFromNetwork() {
   
   if (httpResponseCode == 200) {
     String payload = http.getString();
-    Serial.println("Weather data received: " + payload);
+    Logger::debug("WeatherManager", ("Weather data received: " + payload).c_str());
     
     // 解析JSON数据
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, payload);
     
     if (error) {
-      Serial.println("Failed to parse JSON: " + String(error.c_str()));
+      String msg = "Failed to parse JSON: " + String(error.c_str());
+      Logger::error("WeatherManager", msg.c_str());
       http.end();
       return false;
     }
-    
-    // 检查status是否为"1"
-    String status = doc["status"].as<String>();
+
+    // 检查API返回状态
+    String status = doc["status"];
     if (status != "1") {
-      Serial.println("API returned error status: " + status);
+      String msg = "API returned error status: " + status;
+      Logger::error("WeatherManager", msg.c_str());
       http.end();
       return false;
     }
@@ -123,19 +121,21 @@ bool WeatherManager::fetchWeatherFromNetwork() {
     
     // 根据天气状况设置符号
     _currentWeather.Symbol = mapWeatherToSymbol(_currentWeather.Weather);
-    
-    Serial.println("Weather updated successfully");
-    Serial.println("Temperature: " + String(_currentWeather.Temperature));
-    Serial.println("Humidity: " + String(_currentWeather.Humidity));
-    Serial.println("Wind Direction: " + _currentWeather.WindDirection);
-    Serial.println("Wind Speed: " + _currentWeather.WindSpeed);
-    Serial.println("Weather: " + _currentWeather.Weather);
-    Serial.println("Symbol: " + String(_currentWeather.Symbol));
-    
+
+    Logger::info(F("WeatherManager"), F("Weather updated successfully"));
+    Logger::infoValue(F("WeatherManager"), F("Temperature:"), _currentWeather.Temperature, F("°C"), 1);
+    Logger::infoValue(F("WeatherManager"), F("Humidity:"), _currentWeather.Humidity, F("%"));
+    Logger::info("WeatherManager", ("Wind Direction: " + _currentWeather.WindDirection).c_str());
+    Logger::info("WeatherManager", ("Wind Speed: " + _currentWeather.WindSpeed).c_str());
+    Logger::info("WeatherManager", ("Weather: " + _currentWeather.Weather).c_str());
+    char symbolMsg[32];
+    snprintf(symbolMsg, sizeof(symbolMsg), "Symbol: %c", _currentWeather.Symbol);
+    Logger::info("WeatherManager", symbolMsg);
+
     http.end();
     return true;
   } else {
-    Serial.println("HTTP request failed with code: " + String(httpResponseCode));
+    Logger::error("WeatherManager", ("HTTP request failed with code: " + String(httpResponseCode)).c_str());
     http.end();
     return false;
   }
@@ -153,29 +153,25 @@ bool WeatherManager::readWeatherFromStorage() {
   
   // 检查校验和
   if (storedChecksum != calculatedChecksum) {
-    Serial.println("Weather data checksum mismatch, using default values");
+    Logger::warning(F("WeatherManager"), F("Weather data checksum mismatch, using default values"));
     return false;
   }
-  
-  // 检查上次更新时间是否为0（首次使用）
+
+  // 检查是否有有效数据
   if (storageData.lastUpdateTime == 0) {
-    Serial.println("No weather data stored, using default values");
+    Logger::info(F("WeatherManager"), F("No weather data stored, using default values"));
     return false;
   }
   
   // 转换数据格式
   convertFromStorageData(storageData, _currentWeather);
-  
-  Serial.println("Weather data read from EEPROM successfully");
-  Serial.print("Temperature: ");
-  Serial.println(_currentWeather.Temperature);
-  Serial.print("Humidity: ");
-  Serial.println(_currentWeather.Humidity);
-  Serial.print("Weather: ");
-  Serial.println(_currentWeather.Weather);
-  Serial.print("Last Update: ");
-  Serial.println(storageData.lastUpdateTime);
-  
+
+  Logger::info(F("WeatherManager"), F("Weather data read from EEPROM successfully"));
+  Logger::infoValue(F("WeatherManager"), F("Temperature:"), _currentWeather.Temperature, F("°C"), 1);
+  Logger::infoValue(F("WeatherManager"), F("Humidity:"), _currentWeather.Humidity, F("%"));
+  Logger::info("WeatherManager", ("Weather: " + _currentWeather.Weather).c_str());
+  Logger::infoValue(F("WeatherManager"), F("Last Update:"), (int)storageData.lastUpdateTime);
+
   return true;
 }
 
@@ -190,7 +186,7 @@ bool WeatherManager::writeWeatherToStorage() {
   if (currentTime != 0 && currentTime != 1 && currentTime != (time_t)-1) {
     storageData.lastUpdateTime = currentTime;
   } else {
-    Serial.println("Failed to get current timestamp for weather update");
+    Logger::error(F("WeatherManager"), F("Failed to get current timestamp for weather update"));
     return false;
   }
   
@@ -205,17 +201,13 @@ bool WeatherManager::writeWeatherToStorage() {
   bool success = EEPROM.commit();
   
   if (success) {
-    Serial.println("Weather data written to EEPROM successfully");
-    Serial.print("Temperature: ");
-    Serial.println(storageData.temperature);
-    Serial.print("Humidity: ");
-    Serial.println(storageData.humidity);
-    Serial.print("Weather: ");
-    Serial.println(storageData.weather);
-    Serial.print("Last Update: ");
-    Serial.println(storageData.lastUpdateTime);
+    Logger::info(F("WeatherManager"), F("Weather data written to EEPROM successfully"));
+    Logger::infoValue(F("WeatherManager"), F("Temperature:"), storageData.temperature, F("°C"), 1);
+    Logger::infoValue(F("WeatherManager"), F("Humidity:"), storageData.humidity, F("%"));
+    Logger::info("WeatherManager", ("Weather: " + String(storageData.weather)).c_str());
+    Logger::infoValue(F("WeatherManager"), F("Last Update:"), (int)storageData.lastUpdateTime);
   } else {
-    Serial.println("Failed to write weather data to EEPROM");
+    Logger::error(F("WeatherManager"), F("Failed to write weather data to EEPROM"));
   }
   
   return success;
@@ -254,7 +246,7 @@ bool WeatherManager::setUpdateTime(unsigned long timestamp) {
   
   // 检查校验和
   if (storedChecksum != calculatedChecksum) {
-    Serial.println("Weather data checksum mismatch, cannot update timestamp");
+    Logger::error(F("WeatherManager"), F("Weather data checksum mismatch, cannot update timestamp"));
     return false;
   }
   
@@ -272,11 +264,10 @@ bool WeatherManager::setUpdateTime(unsigned long timestamp) {
   bool success = EEPROM.commit();
   
   if (success) {
-    Serial.println("Timestamp updated successfully");
-    Serial.print("New timestamp: ");
-    Serial.println(timestamp);
+    Logger::info(F("WeatherManager"), F("Timestamp updated successfully"));
+    Logger::infoValue(F("WeatherManager"), F("New timestamp:"), (int)timestamp);
   } else {
-    Serial.println("Failed to update timestamp");
+    Logger::error(F("WeatherManager"), F("Failed to update timestamp"));
   }
   
   return success;
@@ -294,8 +285,8 @@ void WeatherManager::clearWeatherData() {
   
   // 提交更改
   EEPROM.commit();
-  
-  Serial.println("Weather data cleared from EEPROM");
+
+  Logger::info(F("WeatherManager"), F("Weather data cleared from EEPROM"));
 }
 
 char WeatherManager::mapWeatherToSymbol(const String& weather) {
@@ -383,13 +374,13 @@ unsigned long WeatherManager::getCurrentUnixTimestamp() {
   time_t now = time(nullptr);
   
   // 如果系统时间不可用，从RTC获取时间并转换为Unix时间戳
+  // 如果系统时间不可用，从RTC获取时间并转换为Unix时间戳
   if (now == 0 || now == 1) {
-    Serial.println("System time not available, using RTC time");
-    
-    // 从RTC获取时间
+    Logger::debug(F("WeatherManager"), F("System time not available, using RTC time"));
+
     BM8563_Time rtcTime;
     if (!_rtc->getTime(&rtcTime)) {
-      Serial.println("Failed to read time from RTC");
+      Logger::error(F("WeatherManager"), F("Failed to read time from RTC"));
       return 0;
     }
     
@@ -414,14 +405,12 @@ unsigned long WeatherManager::getCurrentUnixTimestamp() {
     }
     
     if (now == (time_t)-1) {
-      Serial.println("Failed to convert RTC time to Unix timestamp");
+      Logger::error(F("WeatherManager"), F("Failed to convert RTC time to Unix timestamp"));
       return 0;
     }
-    
-    Serial.print("RTC time converted to Unix timestamp: ");
-    Serial.println(now);
+
+    Logger::debug("WeatherManager", ("RTC time converted to Unix timestamp: " + String((unsigned long)now)).c_str());
   }
-  
   return now;
 }
 
