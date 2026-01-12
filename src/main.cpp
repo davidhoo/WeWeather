@@ -3,6 +3,7 @@
 #include <time.h>
 #include <Wire.h>
 #include <ESP8266mDNS.h>
+#include "../config.h"
 #include "../lib/BM8563/BM8563.h"
 #include "../lib/GDEY029T94/GDEY029T94.h"
 #include "../lib/WeatherManager/WeatherManager.h"
@@ -38,12 +39,12 @@ GDEY029T94 epd(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
 // 创建WiFiManager对象实例
 WiFiManager wifiManager;
 
-// 高德地图API配置
-const char* AMAP_API_KEY = "b4bed4011e9375d01423a45fba58e836";
-String cityCode = "110108";  // 北京海淀区，可根据需要修改
+// 高德地图API配置（从config.h读取）
+const char* amapApiKey = AMAP_API_KEY;
+String cityCode = CITY_CODE;
 
 // 创建WeatherManager对象实例
-WeatherManager weatherManager(AMAP_API_KEY, cityCode, &rtc, 512);
+WeatherManager weatherManager(amapApiKey, cityCode, &rtc, 512);
 
 // 创建SHT40对象实例
 SHT40 sht40(SDA_PIN, SCL_PIN);
