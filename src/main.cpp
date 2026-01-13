@@ -296,11 +296,19 @@ void enterConfigMode() {
   LOG_INFO("Type 'help' for available commands");
   
   // 配置模式下保持运行，不进入深度睡眠
+  int loopCount = 0;
   while (true) {
     // 处理串口命令
     if (Serial.available()) {
+      LOG_DEBUG("Serial data available, processing command...");
       processSerialCommand();
     }
+    
+    // 每10秒输出一次心跳信息
+    if (loopCount % 100 == 0) {
+      LOG_DEBUG_F("Config mode running... (loop %d)", loopCount);
+    }
+    loopCount++;
     
     delay(100); // 减少延时，提高响应性
     // 这里可以添加其他配置模式的逻辑
@@ -403,6 +411,9 @@ void processSerialCommand() {
   String command = Serial.readStringUntil('\n');
   command.trim(); // 去除首尾空白字符
   
+  // 调试输出
+  Serial.println("Received command: '" + command + "' (length: " + String(command.length()) + ")");
+  
   if (command.length() == 0) {
     Serial.print("> ");
     return;
@@ -414,6 +425,9 @@ void processSerialCommand() {
   String args = (spaceIndex > 0) ? command.substring(spaceIndex + 1) : "";
   
   cmd.toLowerCase();
+  
+  // 调试输出
+  Serial.println("Parsed command: '" + cmd + "', args: '" + args + "'");
   
   // 执行命令
   if (cmd == "show") {
@@ -438,7 +452,7 @@ void processSerialCommand() {
   } else if (cmd == "exit") {
     exitConfigMode();
   } else {
-    Serial.println("Unknown command: " + cmd);
+    Serial.println("Unknown command: '" + cmd + "'");
     Serial.println("Type 'help' for available commands");
   }
   
