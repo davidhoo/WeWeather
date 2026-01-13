@@ -105,15 +105,9 @@ void initializeRTC() {
   if (rtc.begin()) {
     LOG_INFO("BM8563 RTC initialized successfully");
     
-    // 清除RTC中断标志
-    rtc.clearTimerFlag();
-    rtc.clearAlarmFlag();
-    LOG_INFO("RTC interrupt flags cleared");
-    
-    // 确保中断被禁用，防止INT持续拉低
-    rtc.enableTimerInterrupt(false);
-    rtc.enableAlarmInterrupt(false);
-    LOG_INFO("RTC interrupts disabled");
+    // 重置所有中断标志和禁用中断，防止 INT 引脚持续拉低
+    rtc.resetInterrupts();
+    LOG_INFO("RTC interrupts reset and disabled");
   } else {
     LOG_ERROR("Failed to initialize BM8563 RTC");
   }
@@ -209,17 +203,9 @@ void loop() {
 void goToDeepSleep() {
   LOG_INFO("Setting up and entering deep sleep...");
   
-  // 清除之前的定时器标志和闹钟标志
-  rtc.clearTimerFlag();
-  rtc.clearAlarmFlag();
-  LOG_INFO("RTC interrupt flags cleared");
-  
-  // 设置RTC定时器，使用配置中的时间
-  rtc.setTimer(RTC_TIMER_SECONDS, BM8563_TIMER_1HZ);
-  
-  // 启用定时器中断
-  rtc.enableTimerInterrupt(true);
-  LOG_INFO("Timer interrupt enabled");
+  // 配置 RTC 定时器在指定时间后通过 INT 引脚唤醒 ESP8266
+  rtc.setupWakeupTimer(RTC_TIMER_SECONDS);
+  LOG_INFO("RTC wakeup timer configured");
   
   LOG_INFO("Entering deep sleep...");
   Serial.flush();
@@ -227,7 +213,8 @@ void goToDeepSleep() {
   // 等待串口输出完成
   delay(100);
   
-  // 进入深度睡眠，由RTC定时器唤醒
-  ESP.deepSleep(0); // 0表示无限期睡眠，直到外部复位
+  // 进入深度睡眠，参数 0 表示无限期睡眠直到外部唤醒
+  // 实际唤醒由 RTC 定时器触发硬件复位实现
+  ESP.deepSleep(0);
 }
 
