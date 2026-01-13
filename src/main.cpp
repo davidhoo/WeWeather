@@ -77,14 +77,43 @@ void initializeManagers() {
   // 初始化统一配置管理器
   unifiedConfigManager.begin();
   
-  // 从配置管理器获取API配置
+  // 检查是否需要清除EEPROM（API Key字段损坏）
   String apiKey = unifiedConfigManager.getAmapApiKey();
+  if (apiKey.length() > 32 || apiKey.indexOf(0xFF) != -1) {
+    LOG_INFO("EEPROM API Key data corrupted, clearing EEPROM...");
+    unifiedConfigManager.clearEEPROMConfig();
+    LOG_INFO("EEPROM cleared, using default configuration");
+  }
+  
+  // 从配置管理器获取API配置
+  apiKey = unifiedConfigManager.getAmapApiKey();
   String cityCode = unifiedConfigManager.getCityCode();
   
-  LOG_INFO_F("DEBUG: Raw API Key from UnifiedConfigManager: '%s'", apiKey.c_str());
-  LOG_INFO_F("DEBUG: Raw City Code from UnifiedConfigManager: '%s'", cityCode.c_str());
+  // 详细调试信息
+  LOG_INFO_UTF8("=== 配置调试信息 ===");
+  LOG_INFO_UTF8("Raw API Key from UnifiedConfigManager: '%s'", apiKey.c_str());
+  LOG_INFO_UTF8("Raw City Code from UnifiedConfigManager: '%s'", cityCode.c_str());
+  LOG_INFO_UTF8("API Key length: %d", apiKey.length());
+  LOG_INFO_UTF8("City Code length: %d", cityCode.length());
+  
+  // 检查每个字符的十六进制值
+  LOG_INFO_UTF8("API Key hex dump:");
+  for (int i = 0; i < apiKey.length() && i < 20; i++) {
+    Serial.print(apiKey.charAt(i), HEX);
+    Serial.print(" ");
+  }
+  Serial.println();
+  
+  LOG_INFO_UTF8("City Code hex dump:");
+  for (int i = 0; i < cityCode.length() && i < 20; i++) {
+    Serial.print(cityCode.charAt(i), HEX);
+    Serial.print(" ");
+  }
+  Serial.println();
+  
   LOG_INFO_F("Using API Key: %s", apiKey.length() > 0 ? "***" : "未设置");
-  LOG_INFO_F("Using City Code: %s", cityCode.c_str());
+  LOG_INFO_UTF8("Using City Code: %s", cityCode.c_str());
+  LOG_INFO_UTF8("=== 调试信息结束 ===");
   
   // 动态创建WeatherManager实例
   weatherManager = new WeatherManager(apiKey.c_str(), cityCode, &rtc, 512);
