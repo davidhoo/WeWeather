@@ -2,16 +2,26 @@
 #include "../../config.h"
 
 WeatherManager::WeatherManager(const char* apiKey, const String& cityCode, BM8563* rtc, int eepromSize)
-  : _apiKey(apiKey), _cityCode(cityCode), _rtc(rtc), _eepromSize(eepromSize), _eepromAddress(0), _updateIntervalSeconds(WEATHER_UPDATE_INTERVAL) {
+  : _apiKey(apiKey), _cityCode(cityCode), _rtc(rtc), _updateIntervalSeconds(WEATHER_UPDATE_INTERVAL) {
+  // 创建配置管理器实例
+  _configManager = new ConfigManager<ConfigData>(0, eepromSize);
+  
   // 初始化默认天气信息
   initializeDefaultWeather();
 }
 
+WeatherManager::~WeatherManager() {
+  if (_configManager) {
+    delete _configManager;
+    _configManager = nullptr;
+  }
+}
+
 void WeatherManager::begin() {
-  EEPROM.begin(_eepromSize);
+  _configManager->begin();
   Serial.println("WeatherManager initialized");
   
-  // 尝试从EEPROM读取天气信息
+  // 尝试从配置读取天气信息
   if (!readWeatherFromStorage()) {
     Serial.println("Using default weather values");
   }
@@ -142,31 +152,24 @@ bool WeatherManager::fetchWeatherFromNetwork() {
 }
 
 bool WeatherManager::readWeatherFromStorage() {
-  WeatherStorageData storageData;
+  ConfigData configData;
   
-  // 从EEPROM读取数据
-  EEPROM.get(_eepromAddress, storageData);
-  
-  // 计算校验和
-  byte storedChecksum = EEPROM.read(_eepromAddress + sizeof(WeatherStorageData));
-  byte calculatedChecksum = calculateChecksum(storageData);
-  
-  // 检查校验和
-  if (storedChecksum != calculatedChecksum) {
-    Serial.println("Weather data checksum mismatch, using default values");
+  // 使用ConfigManager读取数据
+  if (!_configManager->read(configData)) {
+    Serial.println("Failed to read weather config from storage, using default values");
     return false;
   }
   
   // 检查上次更新时间是否为0（首次使用）
-  if (storageData.lastUpdateTime == 0) {
-    Serial.println("No weather data stored, using default values");
+  if (configData.lastUpdateTime == 0) {
+    Serial.println("No weather config stored, using default values");
     return false;
   }
   
   // 转换数据格式
-  convertFromStorageData(storageData, _currentWeather);
+  convertFromConfigData(configData, _currentWeather);
   
-  Serial.println("Weather data read from EEPROM successfully");
+  Serial.println("Weather config read from storage successfully");
   Serial.print("Temperature: ");
   Serial.println(_currentWeather.Temperature);
   Serial.print("Humidity: ");
@@ -174,48 +177,41 @@ bool WeatherManager::readWeatherFromStorage() {
   Serial.print("Weather: ");
   Serial.println(_currentWeather.Weather);
   Serial.print("Last Update: ");
-  Serial.println(storageData.lastUpdateTime);
+  Serial.println(configData.lastUpdateTime);
   
   return true;
 }
 
 bool WeatherManager::writeWeatherToStorage() {
-  WeatherStorageData storageData;
+  ConfigData configData;
   
   // 转换数据格式
-  convertToStorageData(_currentWeather, storageData);
+  convertToConfigData(_currentWeather, configData);
   
   // 获取当前时间戳
   unsigned long currentTime = getCurrentUnixTimestamp();
   if (currentTime != 0 && currentTime != 1 && currentTime != (time_t)-1) {
-    storageData.lastUpdateTime = currentTime;
+    configData.lastUpdateTime = currentTime;
   } else {
     Serial.println("Failed to get current timestamp for weather update");
     return false;
   }
   
-  // 写入数据到EEPROM
-  EEPROM.put(_eepromAddress, storageData);
-  
-  // 计算并写入校验和
-  byte checksum = calculateChecksum(storageData);
-  EEPROM.write(_eepromAddress + sizeof(WeatherStorageData), checksum);
-  
-  // 提交更改
-  bool success = EEPROM.commit();
+  // 使用ConfigManager写入数据
+  bool success = _configManager->write(configData);
   
   if (success) {
-    Serial.println("Weather data written to EEPROM successfully");
+    Serial.println("Weather config written to storage successfully");
     Serial.print("Temperature: ");
-    Serial.println(storageData.temperature);
+    Serial.println(configData.temperature);
     Serial.print("Humidity: ");
-    Serial.println(storageData.humidity);
+    Serial.println(configData.humidity);
     Serial.print("Weather: ");
-    Serial.println(storageData.weather);
+    Serial.println(configData.weather);
     Serial.print("Last Update: ");
-    Serial.println(storageData.lastUpdateTime);
+    Serial.println(configData.lastUpdateTime);
   } else {
-    Serial.println("Failed to write weather data to EEPROM");
+    Serial.println("Failed to write weather config to storage");
   }
   
   return success;
@@ -226,50 +222,30 @@ void WeatherManager::setUpdateInterval(unsigned long intervalSeconds) {
 }
 
 unsigned long WeatherManager::getLastUpdateTime() {
-  WeatherStorageData storageData;
+  ConfigData configData;
   
-  // 从EEPROM读取数据
-  EEPROM.get(_eepromAddress, storageData);
-  
-  // 计算校验和
-  byte storedChecksum = EEPROM.read(_eepromAddress + sizeof(WeatherStorageData));
-  byte calculatedChecksum = calculateChecksum(storageData);
-  
-  // 检查校验和
-  if (storedChecksum != calculatedChecksum) {
+  // 使用ConfigManager读取数据
+  if (!_configManager->read(configData)) {
     return 0;
   }
   
-  return storageData.lastUpdateTime;
+  return configData.lastUpdateTime;
 }
 
 bool WeatherManager::setUpdateTime(unsigned long timestamp) {
+  ConfigData configData;
+  
   // 读取现有的数据
-  WeatherStorageData storageData;
-  EEPROM.get(_eepromAddress, storageData);
-  
-  // 计算校验和
-  byte storedChecksum = EEPROM.read(_eepromAddress + sizeof(WeatherStorageData));
-  byte calculatedChecksum = calculateChecksum(storageData);
-  
-  // 检查校验和
-  if (storedChecksum != calculatedChecksum) {
-    Serial.println("Weather data checksum mismatch, cannot update timestamp");
+  if (!_configManager->read(configData)) {
+    Serial.println("Weather config not found, cannot update timestamp");
     return false;
   }
   
   // 更新时间戳
-  storageData.lastUpdateTime = timestamp;
+  configData.lastUpdateTime = timestamp;
   
-  // 写入数据到EEPROM
-  EEPROM.put(_eepromAddress, storageData);
-  
-  // 计算并写入校验和
-  byte checksum = calculateChecksum(storageData);
-  EEPROM.write(_eepromAddress + sizeof(WeatherStorageData), checksum);
-  
-  // 提交更改
-  bool success = EEPROM.commit();
+  // 使用ConfigManager写入数据
+  bool success = _configManager->write(configData);
   
   if (success) {
     Serial.println("Timestamp updated successfully");
@@ -283,19 +259,9 @@ bool WeatherManager::setUpdateTime(unsigned long timestamp) {
 }
 
 void WeatherManager::clearWeatherData() {
-  WeatherStorageData storageData = {0};
-  
-  // 写入空数据
-  EEPROM.put(_eepromAddress, storageData);
-  
-  // 写入校验和
-  byte checksum = calculateChecksum(storageData);
-  EEPROM.write(_eepromAddress + sizeof(WeatherStorageData), checksum);
-  
-  // 提交更改
-  EEPROM.commit();
-  
-  Serial.println("Weather data cleared from EEPROM");
+  // 使用ConfigManager清除数据
+  _configManager->clear();
+  Serial.println("Weather config cleared from storage");
 }
 
 char WeatherManager::mapWeatherToSymbol(const String& weather) {
@@ -342,41 +308,54 @@ void WeatherManager::initializeDefaultWeather() {
   _currentWeather.Weather = "晴";
 }
 
-void WeatherManager::convertToStorageData(const WeatherInfo& weatherInfo, WeatherStorageData& storageData) {
-  storageData.temperature = weatherInfo.Temperature;
-  storageData.humidity = weatherInfo.Humidity;
-  storageData.symbol = weatherInfo.Symbol;
+void WeatherManager::convertToConfigData(const WeatherInfo& weatherInfo, ConfigData& configData) {
+  // 天气配置
+  configData.temperature = weatherInfo.Temperature;
+  configData.humidity = weatherInfo.Humidity;
+  configData.symbol = weatherInfo.Symbol;
   
   // 复制字符串，确保不超过缓冲区大小
-  strncpy(storageData.windDirection, weatherInfo.WindDirection.c_str(), sizeof(storageData.windDirection) - 1);
-  storageData.windDirection[sizeof(storageData.windDirection) - 1] = '\0';
+  strncpy(configData.windDirection, weatherInfo.WindDirection.c_str(), sizeof(configData.windDirection) - 1);
+  configData.windDirection[sizeof(configData.windDirection) - 1] = '\0';
   
-  strncpy(storageData.windSpeed, weatherInfo.WindSpeed.c_str(), sizeof(storageData.windSpeed) - 1);
-  storageData.windSpeed[sizeof(storageData.windSpeed) - 1] = '\0';
+  strncpy(configData.windSpeed, weatherInfo.WindSpeed.c_str(), sizeof(configData.windSpeed) - 1);
+  configData.windSpeed[sizeof(configData.windSpeed) - 1] = '\0';
   
-  strncpy(storageData.weather, weatherInfo.Weather.c_str(), sizeof(storageData.weather) - 1);
-  storageData.weather[sizeof(storageData.weather) - 1] = '\0';
+  strncpy(configData.weather, weatherInfo.Weather.c_str(), sizeof(configData.weather) - 1);
+  configData.weather[sizeof(configData.weather) - 1] = '\0';
+  
+  // API配置 - 从config.h获取默认值
+  strncpy(configData.amapApiKey, DEFAULT_AMAP_API_KEY, sizeof(configData.amapApiKey) - 1);
+  configData.amapApiKey[sizeof(configData.amapApiKey) - 1] = '\0';
+  
+  strncpy(configData.cityCode, DEFAULT_CITY_CODE, sizeof(configData.cityCode) - 1);
+  configData.cityCode[sizeof(configData.cityCode) - 1] = '\0';
+  
+  // WiFi配置 - 从config.h获取默认值
+  strncpy(configData.wifiSSID, DEFAULT_WIFI_SSID, sizeof(configData.wifiSSID) - 1);
+  configData.wifiSSID[sizeof(configData.wifiSSID) - 1] = '\0';
+  
+  strncpy(configData.wifiPassword, DEFAULT_WIFI_PASSWORD, sizeof(configData.wifiPassword) - 1);
+  configData.wifiPassword[sizeof(configData.wifiPassword) - 1] = '\0';
+  
+  // 硬件配置 - 从config.h获取默认值
+  strncpy(configData.macAddress, DEFAULT_MAC_ADDRESS, sizeof(configData.macAddress) - 1);
+  configData.macAddress[sizeof(configData.macAddress) - 1] = '\0';
 }
 
-void WeatherManager::convertFromStorageData(const WeatherStorageData& storageData, WeatherInfo& weatherInfo) {
-  weatherInfo.Temperature = storageData.temperature;
-  weatherInfo.Humidity = storageData.humidity;
-  weatherInfo.Symbol = storageData.symbol;
-  weatherInfo.WindDirection = String(storageData.windDirection);
-  weatherInfo.WindSpeed = String(storageData.windSpeed);
-  weatherInfo.Weather = String(storageData.weather);
+void WeatherManager::convertFromConfigData(const ConfigData& configData, WeatherInfo& weatherInfo) {
+  // 只转换天气相关的字段到 WeatherInfo
+  weatherInfo.Temperature = configData.temperature;
+  weatherInfo.Humidity = configData.humidity;
+  weatherInfo.Symbol = configData.symbol;
+  weatherInfo.WindDirection = String(configData.windDirection);
+  weatherInfo.WindSpeed = String(configData.windSpeed);
+  weatherInfo.Weather = String(configData.weather);
+  
+  // 其他配置项（API、WiFi、硬件配置）不需要转换到 WeatherInfo
+  // 它们可以通过其他方法从 ConfigData 中直接访问
 }
 
-byte WeatherManager::calculateChecksum(const WeatherStorageData& data) {
-  byte checksum = 0;
-  const byte* ptr = (const byte*)&data;
-  
-  for (size_t i = 0; i < sizeof(WeatherStorageData); i++) {
-    checksum ^= ptr[i];
-  }
-  
-  return checksum;
-}
 
 unsigned long WeatherManager::getCurrentUnixTimestamp() {
   // 尝试从系统获取当前Unix时间戳
