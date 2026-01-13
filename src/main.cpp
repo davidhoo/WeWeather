@@ -12,6 +12,7 @@
 #include "../lib/TimeManager/TimeManager.h"
 #include "../lib/SHT40/SHT40.h"
 #include "../lib/BatteryMonitor/BatteryMonitor.h"
+#include "../lib/ConfigManager/ConfigManager.h"
 #include "../lib/Fonts/Weather_Symbols_Regular9pt7b.h"
 #include "../lib/Fonts/DSEG7Modern_Bold28pt7b.h"
 
@@ -36,6 +37,9 @@ SHT40 sht40(I2C_SDA_PIN, I2C_SCL_PIN);
 // 创建BatteryMonitor对象实例
 BatteryMonitor battery;
 
+// 创建ConfigManager对象实例
+ConfigManager<ConfigData> configManager;
+
 // 函数声明
 void initializeSerial();
 void initializeManagers();
@@ -54,6 +58,15 @@ void clearRTCWakeupSettings();
 void showConfigDisplay();
 void startAPWebConfigService();
 void startSerialConfigService();
+
+// 串口配置服务相关函数声明
+void processSerialCommand();
+void showConfig();
+void setConfig(String key, String value);
+void clearConfig();
+void saveConfig();
+void showHelp();
+void exitConfigMode();
 
 /**
  * @brief 初始化串口通信
@@ -269,21 +282,29 @@ void enterConfigMode() {
   // 1. 清除RTC的定时唤醒设置
   clearRTCWakeupSettings();
   
-  // 2. 启动配置服务
+  // 2. 初始化ConfigManager
+  configManager.begin();
+  
+  // 3. 启动配置服务
   startAPWebConfigService();
   startSerialConfigService();
   
-  // 3. 在屏幕显示配置信息提示（需要先启动服务获取IP）
+  // 4. 在屏幕显示配置信息提示（需要先启动服务获取IP）
   showConfigDisplay();
   
   LOG_INFO("Configuration mode services started");
+  LOG_INFO("Type 'help' for available commands");
   
   // 配置模式下保持运行，不进入深度睡眠
-  // 实际的配置逻辑将在后续版本中实现
   while (true) {
-    delay(1000);
-    // 这里可以添加配置模式的主循环逻辑
-    // 例如：处理Web请求、串口命令等
+    // 处理串口命令
+    if (Serial.available()) {
+      processSerialCommand();
+    }
+    
+    delay(100); // 减少延时，提高响应性
+    // 这里可以添加其他配置模式的逻辑
+    // 例如：处理Web请求等
   }
 }
 
@@ -365,6 +386,209 @@ void startSerialConfigService() {
   // - 解析配置参数
   // - 保存配置到存储
   
-  LOG_INFO("Serial configuration service started (placeholder implementation)");
+  LOG_INFO("Serial configuration service started");
+  
+  // 显示欢迎信息和帮助提示
+  Serial.println();
+  Serial.println("=== WeWeather Serial Configuration ===");
+  Serial.println("Type 'help' for available commands");
+  Serial.print("> ");
+}
+
+/**
+ * @brief 处理串口命令
+ * 读取串口输入并解析命令
+ */
+void processSerialCommand() {
+  String command = Serial.readStringUntil('\n');
+  command.trim(); // 去除首尾空白字符
+  
+  if (command.length() == 0) {
+    Serial.print("> ");
+    return;
+  }
+  
+  // 解析命令和参数
+  int spaceIndex = command.indexOf(' ');
+  String cmd = (spaceIndex > 0) ? command.substring(0, spaceIndex) : command;
+  String args = (spaceIndex > 0) ? command.substring(spaceIndex + 1) : "";
+  
+  cmd.toLowerCase();
+  
+  // 执行命令
+  if (cmd == "show") {
+    showConfig();
+  } else if (cmd == "set") {
+    // 解析 set 命令的参数：set key value
+    int argSpaceIndex = args.indexOf(' ');
+    if (argSpaceIndex > 0) {
+      String key = args.substring(0, argSpaceIndex);
+      String value = args.substring(argSpaceIndex + 1);
+      setConfig(key, value);
+    } else {
+      Serial.println("Usage: set <key> <value>");
+      Serial.println("Keys: ssid, password, apikey, citycode, mac");
+    }
+  } else if (cmd == "clear") {
+    clearConfig();
+  } else if (cmd == "save") {
+    saveConfig();
+  } else if (cmd == "help") {
+    showHelp();
+  } else if (cmd == "exit") {
+    exitConfigMode();
+  } else {
+    Serial.println("Unknown command: " + cmd);
+    Serial.println("Type 'help' for available commands");
+  }
+  
+  Serial.print("> ");
+}
+
+/**
+ * @brief 显示当前配置
+ */
+void showConfig() {
+  Serial.println("=== Current Configuration ===");
+  
+  ConfigData config;
+  if (configManager.read(config)) {
+    Serial.println("SSID: " + String(config.wifiSSID));
+    Serial.println("password: " + String(config.wifiPassword));
+    Serial.println("API Key: " + String(config.amapApiKey));
+    Serial.println("City Code: " + String(config.cityCode));
+    Serial.println("MAC Address: " + String(config.macAddress));
+  } else {
+    Serial.println("No valid configuration found or failed to read");
+  }
+  
+  Serial.println("=============================");
+}
+
+/**
+ * @brief 设置配置项
+ * @param key 配置键
+ * @param value 配置值
+ */
+void setConfig(String key, String value) {
+  key.toLowerCase();
+  
+  ConfigData config;
+  // 尝试读取现有配置，如果失败则使用默认值
+  if (!configManager.read(config)) {
+    // 初始化为空配置
+    memset(&config, 0, sizeof(config));
+  }
+  
+  bool validKey = true;
+  
+  if (key == "ssid") {
+    strncpy(config.wifiSSID, value.c_str(), sizeof(config.wifiSSID) - 1);
+    config.wifiSSID[sizeof(config.wifiSSID) - 1] = '\0';
+  } else if (key == "password") {
+    strncpy(config.wifiPassword, value.c_str(), sizeof(config.wifiPassword) - 1);
+    config.wifiPassword[sizeof(config.wifiPassword) - 1] = '\0';
+  } else if (key == "apikey") {
+    strncpy(config.amapApiKey, value.c_str(), sizeof(config.amapApiKey) - 1);
+    config.amapApiKey[sizeof(config.amapApiKey) - 1] = '\0';
+  } else if (key == "citycode") {
+    strncpy(config.cityCode, value.c_str(), sizeof(config.cityCode) - 1);
+    config.cityCode[sizeof(config.cityCode) - 1] = '\0';
+  } else if (key == "mac") {
+    strncpy(config.macAddress, value.c_str(), sizeof(config.macAddress) - 1);
+    config.macAddress[sizeof(config.macAddress) - 1] = '\0';
+  } else {
+    validKey = false;
+    Serial.println("Invalid key: " + key);
+    Serial.println("Valid keys: ssid, password, apikey, citycode, mac");
+  }
+  
+  if (validKey) {
+    // 临时保存到内存，需要调用 save 命令才会写入EEPROM
+    Serial.println("Set " + key + " = " + value);
+    Serial.println("Use 'save' command to persist changes");
+    
+    // 这里我们直接写入，也可以选择先缓存
+    if (configManager.write(config)) {
+      Serial.println("Configuration updated successfully");
+    } else {
+      Serial.println("Failed to update configuration");
+    }
+  }
+}
+
+/**
+ * @brief 清除配置
+ */
+void clearConfig() {
+  Serial.print("Are you sure you want to clear all configuration? (y/N): ");
+  
+  // 等待用户确认
+  while (!Serial.available()) {
+    delay(100);
+  }
+  
+  String confirmation = Serial.readStringUntil('\n');
+  confirmation.trim();
+  confirmation.toLowerCase();
+  
+  if (confirmation == "y" || confirmation == "yes") {
+    configManager.clear();
+    Serial.println("Configuration cleared");
+  } else {
+    Serial.println("Operation cancelled");
+  }
+}
+
+/**
+ * @brief 保存配置到EEPROM
+ */
+void saveConfig() {
+  // 由于我们在 setConfig 中已经直接写入，这里主要是确认操作
+  if (configManager.isValid()) {
+    Serial.println("Configuration is already saved and valid");
+  } else {
+    Serial.println("No valid configuration to save");
+  }
+}
+
+/**
+ * @brief 显示帮助信息
+ */
+void showHelp() {
+  Serial.println("=== Available Commands ===");
+  Serial.println("show                    - Display current configuration");
+  Serial.println("set <key> <value>       - Set configuration value");
+  Serial.println("  Keys: ssid, password, apikey, citycode, mac");
+  Serial.println("clear                   - Clear all configuration");
+  Serial.println("save                    - Save configuration to EEPROM");
+  Serial.println("help                    - Show this help message");
+  Serial.println("exit                    - Exit configuration mode (restart system)");
+  Serial.println("==========================");
+  Serial.println();
+  Serial.println("Examples:");
+  Serial.println("  set ssid MyWiFi");
+  Serial.println("  set password myPassword");
+  Serial.println("  set apikey your_amap_api_key");
+  Serial.println("  set citycode 110108");
+  Serial.println("  set mac AA:BB:CC:DD:EE:FF");
+}
+
+/**
+ * @brief 退出配置模式
+ * 重启系统以应用新配置
+ */
+void exitConfigMode() {
+  Serial.println("Exiting configuration mode...");
+  Serial.println("System will restart in 3 seconds...");
+  
+  for (int i = 3; i > 0; i--) {
+    Serial.println(String(i) + "...");
+    delay(1000);
+  }
+  
+  Serial.println("Restarting...");
+  Serial.flush();
+  ESP.restart();
 }
 
