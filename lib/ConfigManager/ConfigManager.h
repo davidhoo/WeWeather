@@ -4,7 +4,6 @@
 #include <Arduino.h>
 #include <EEPROM.h>
 #include "../LogManager/LogManager.h"
-
 // 统一配置数据结构体（用于EEPROM存储）
 struct ConfigData {
   // 天气配置

@@ -64,7 +64,6 @@ void processSerialCommand();
 void showConfig();
 void setConfig(String key, String value);
 void clearConfig();
-void saveConfig();
 void showHelp();
 void exitConfigMode();
 
@@ -307,21 +306,13 @@ void enterConfigMode() {
   LOG_INFO("Type 'help' for available commands");
   
   // 配置模式下保持运行，不进入深度睡眠
-  int loopCount = 0;
   while (true) {
-    // 处理串口命令
     // 处理串口命令
     int available = Serial.available();
     if (available > 0) {
       LOG_INFO_F("Serial data available: %d bytes, processing command...", available);
       processSerialCommand();
     }
-    
-    // 每10秒输出一次心跳信息
-    if (loopCount % 100 == 0) {
-      LOG_INFO_F("Config mode running... (loop %d)", loopCount);
-    }
-    loopCount++;
     
     delay(100); // 减少延时，提高响应性
     // 这里可以添加其他配置模式的逻辑
@@ -473,8 +464,6 @@ void processSerialCommand() {
     }
   } else if (cmd == "clear") {
     clearConfig();
-  } else if (cmd == "save") {
-    saveConfig();
   } else if (cmd == "help") {
     showHelp();
   } else if (cmd == "exit") {
@@ -546,51 +535,41 @@ void setConfig(String key, String value) {
   }
   
   if (validKey) {
-    // 临时保存到内存，需要调用 save 命令才会写入EEPROM
     Serial.println("Set " + key + " = " + value);
-    Serial.println("Use 'save' command to persist changes");
     
-    // 这里我们直接写入，也可以选择先缓存
+    // 直接写入EEPROM
     if (configManager.write(config)) {
-      Serial.println("Configuration updated successfully");
+      Serial.println("Configuration saved successfully");
     } else {
-      Serial.println("Failed to update configuration");
+      Serial.println("Failed to save configuration");
     }
   }
 }
 
 /**
  * @brief 清除配置
+ * 只清除系统配置字段（SSID、password、citycode、apikey、mac），保持天气数据不变
  */
 void clearConfig() {
-  Serial.print("Are you sure you want to clear all configuration? (y/N): ");
+  ConfigData config;
   
-  // 等待用户确认
-  while (!Serial.available()) {
-    delay(100);
-  }
-  
-  String confirmation = Serial.readStringUntil('\n');
-  confirmation.trim();
-  confirmation.toLowerCase();
-  
-  if (confirmation == "y" || confirmation == "yes") {
-    configManager.clear();
-    Serial.println("Configuration cleared");
+  // 先读取现有配置，保持天气数据
+  if (configManager.read(config)) {
+    // 只清除系统配置字段，保持天气数据不变
+    memset(config.wifiSSID, 0, sizeof(config.wifiSSID));
+    memset(config.wifiPassword, 0, sizeof(config.wifiPassword));
+    memset(config.amapApiKey, 0, sizeof(config.amapApiKey));
+    memset(config.cityCode, 0, sizeof(config.cityCode));
+    memset(config.macAddress, 0, sizeof(config.macAddress));
+    
+    // 写回配置，天气数据保持不变
+    if (configManager.write(config)) {
+      Serial.println("System configuration cleared (weather data preserved)");
+    } else {
+      Serial.println("Failed to clear configuration");
+    }
   } else {
-    Serial.println("Operation cancelled");
-  }
-}
-
-/**
- * @brief 保存配置到EEPROM
- */
-void saveConfig() {
-  // 由于我们在 setConfig 中已经直接写入，这里主要是确认操作
-  if (configManager.isValid()) {
-    Serial.println("Configuration is already saved and valid");
-  } else {
-    Serial.println("No valid configuration to save");
+    Serial.println("No configuration found to clear");
   }
 }
 
@@ -600,10 +579,9 @@ void saveConfig() {
 void showHelp() {
   Serial.println("=== Available Commands ===");
   Serial.println("show                    - Display current configuration");
-  Serial.println("set <key> <value>       - Set configuration value");
+  Serial.println("set <key> <value>       - Set and save configuration value");
   Serial.println("  Keys: ssid, password, apikey, citycode, mac");
   Serial.println("clear                   - Clear all configuration");
-  Serial.println("save                    - Save configuration to EEPROM");
   Serial.println("help                    - Show this help message");
   Serial.println("exit                    - Exit configuration mode (restart system)");
   Serial.println("==========================");
