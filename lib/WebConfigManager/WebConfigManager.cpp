@@ -14,19 +14,12 @@ const char ERROR_PAGE[] PROGMEM = "<h1 style=\"color:#f44336\">✗ 配置保存�
 
 const char EXIT_PAGE[] PROGMEM = "<h1 style=\"color:#f44336\">正在退出配置模式</h1><p>设备将在 <span id=\"countdown\" style=\"color:#f44336;font-weight:bold\">3</span> 秒后重启</p><p>感谢使用 WeWeather！</p><script>let c=3;setInterval(()=>{document.getElementById('countdown').textContent=--c;if(c<=0)document.body.innerHTML='<div class=\"container\"><h1>设备重启中...</h1></div>';},1000);</script>";
 
-// AP配置常量定义
-const char* WebConfigManager::AP_SSID = "WeWeather-Config";
-const char* WebConfigManager::AP_PASSWORD = "12345678";
-const IPAddress WebConfigManager::AP_IP(192, 168, 4, 1);
-const IPAddress WebConfigManager::AP_GATEWAY(192, 168, 4, 1);
-const IPAddress WebConfigManager::AP_SUBNET(255, 255, 255, 0);
-
 /**
  * @brief 构造函数
  * @param configMgr 配置管理器指针
  */
-WebConfigManager::WebConfigManager(ConfigManager<ConfigData>* configMgr) 
-    : configManager(configMgr), webServer(nullptr), isConfigMode(false), isAPStarted(false) {
+WebConfigManager::WebConfigManager(ConfigManager<ConfigData>* configMgr)
+    : configManager(configMgr), webServer(nullptr), isConfigMode(false) {
 }
 
 /**
@@ -36,46 +29,6 @@ WebConfigManager::~WebConfigManager() {
     if (webServer) {
         delete webServer;
         webServer = nullptr;
-    }
-}
-
-/**
- * @brief 启动AP模式
- * @return true 如果启动成功，false 如果失败
- */
-bool WebConfigManager::startAP() {
-    LOG_INFO("Starting AP mode...");
-    
-    // 停止现有的WiFi连接
-    WiFi.disconnect();
-    delay(100);
-    
-    // 配置AP模式
-    WiFi.mode(WIFI_AP);
-    WiFi.softAPConfig(AP_IP, AP_GATEWAY, AP_SUBNET);
-    
-    // 启动AP热点
-    bool success = WiFi.softAP(AP_SSID, AP_PASSWORD);
-    
-    if (success) {
-        isAPStarted = true;
-        LOG_INFO_F("AP started successfully. SSID: %s, IP: %s", AP_SSID, AP_IP.toString().c_str());
-        return true;
-    } else {
-        LOG_ERROR("Failed to start AP mode");
-        return false;
-    }
-}
-
-/**
- * @brief 停止AP模式
- */
-void WebConfigManager::stopAP() {
-    if (isAPStarted) {
-        LOG_INFO("Stopping AP mode...");
-        WiFi.softAPdisconnect(true);
-        isAPStarted = false;
-        LOG_INFO("AP mode stopped");
     }
 }
 
@@ -118,7 +71,7 @@ void WebConfigManager::stopWebServer() {
 
 /**
  * @brief 启动Web配置服务
- * 启动AP模式和Web服务器，准备接收配置请求
+ * 启动Web服务器，准备接收配置请求
  * @return true 如果启动成功，false 如果失败
  */
 bool WebConfigManager::startConfigService() {
@@ -126,7 +79,7 @@ bool WebConfigManager::startConfigService() {
     
     isConfigMode = true;
     
-    // 只启动Web服务器，AP已经在main.cpp中启动
+    // 启动Web服务器，AP由main.cpp管理
     if (!startWebServer()) {
         LOG_ERROR("Failed to start web server");
         return false;
@@ -354,12 +307,12 @@ String WebConfigManager::generateExitPage() {
 
 /**
  * @brief 退出配置模式
- * 停止AP和Web服务器，重启系统以应用新配置
+ * 停止Web服务器，重启系统以应用新配置
  */
 void WebConfigManager::exitConfigMode() {
     LOG_INFO("Exiting configuration mode...");
     
-    // 只停止Web服务器，AP由main.cpp管理
+    // 停止Web服务器，AP由main.cpp管理
     stopWebServer();
     
     LOG_INFO("System will restart in 3 seconds...");
@@ -389,20 +342,4 @@ bool WebConfigManager::isInConfigMode() const {
  */
 void WebConfigManager::setConfigMode(bool enabled) {
     isConfigMode = enabled;
-}
-
-/**
- * @brief 获取AP的IP地址
- * @return AP的IP地址字符串
- */
-String WebConfigManager::getAPIP() const {
-    return AP_IP.toString();
-}
-
-/**
- * @brief 获取连接的客户端数量
- * @return 连接的客户端数量
- */
-int WebConfigManager::getConnectedClients() const {
-    return WiFi.softAPgetStationNum();
 }

@@ -9,26 +9,17 @@
 
 /**
  * @brief Web配置管理类
- * 
+ *
  * 负责处理通过Web界面进行的设备配置功能，包括：
- * - AP模式启动和管理
  * - Web服务器初始化和路由处理
  * - 配置参数的Web界面显示、设置和保存
- * - 配置模式的进入和退出
+ * - 配置请求的处理
  */
 class WebConfigManager {
 private:
     ConfigManager<ConfigData>* configManager;  // 配置管理器指针
     ESP8266WebServer* webServer;               // Web服务器指针
     bool isConfigMode;                         // 是否处于配置模式
-    bool isAPStarted;                          // AP是否已启动
-    
-    // AP配置
-    static const char* AP_SSID;                // AP热点名称
-    static const char* AP_PASSWORD;            // AP热点密码
-    static const IPAddress AP_IP;              // AP IP地址
-    static const IPAddress AP_GATEWAY;         // AP网关地址
-    static const IPAddress AP_SUBNET;          // AP子网掩码
     
     // 私有方法
     void setupWebRoutes();                     // 设置Web路由
@@ -55,17 +46,6 @@ public:
     ~WebConfigManager();
     
     /**
-     * @brief 启动AP模式
-     * @return true 如果启动成功，false 如果失败
-     */
-    bool startAP();
-    
-    /**
-     * @brief 停止AP模式
-     */
-    void stopAP();
-    
-    /**
      * @brief 启动Web服务器
      * @param port 服务器端口，默认80
      * @return true 如果启动成功，false 如果失败
@@ -79,7 +59,7 @@ public:
     
     /**
      * @brief 启动Web配置服务
-     * 启动AP模式和Web服务器，准备接收配置请求
+     * 启动Web服务器，准备接收配置请求
      * @return true 如果启动成功，false 如果失败
      */
     bool startConfigService();
@@ -92,7 +72,7 @@ public:
     
     /**
      * @brief 退出配置模式
-     * 停止AP和Web服务器，重启系统以应用新配置
+     * 停止Web服务器，重启系统以应用新配置
      */
     void exitConfigMode();
     
@@ -107,18 +87,6 @@ public:
      * @param enabled 是否启用配置模式
      */
     void setConfigMode(bool enabled);
-    
-    /**
-     * @brief 获取AP的IP地址
-     * @return AP的IP地址字符串
-     */
-    String getAPIP() const;
-    
-    /**
-     * @brief 获取连接的客户端数量
-     * @return 连接的客户端数量
-     */
-    int getConnectedClients() const;
 };
 
 #endif // WEB_CONFIG_MANAGER_H
