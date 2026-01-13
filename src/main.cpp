@@ -314,6 +314,7 @@ void enterConfigMode() {
     if (loopCount % 100 == 0) {
       LOG_INFO_F("Config mode running... (loop %d)", loopCount);
     }
+    loopCount++;
     
     delay(100); // 减少延时，提高响应性
     // 这里可以添加其他配置模式的逻辑
