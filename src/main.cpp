@@ -14,6 +14,7 @@
 #include "../lib/BatteryMonitor/BatteryMonitor.h"
 #include "../lib/ConfigManager/ConfigManager.h"
 #include "../lib/SerialConfigManager/SerialConfigManager.h"
+#include "../lib/WebConfigManager/WebConfigManager.h"
 #include "../lib/UnifiedConfigManager/UnifiedConfigManager.h"
 #include "../lib/Fonts/Weather_Symbols_Regular9pt7b.h"
 #include "../lib/Fonts/DSEG7Modern_Bold28pt7b.h"
@@ -46,6 +47,9 @@ ConfigManager<ConfigData> configManager;
 
 // 创建SerialConfigManager对象实例
 SerialConfigManager serialConfigManager(&configManager);
+
+// 创建WebConfigManager对象实例
+WebConfigManager webConfigManager(&configManager);
 
 // 函数声明
 void initializeManagers();
@@ -316,15 +320,15 @@ void enterConfigMode() {
   showConfigDisplay();
   
   LOG_INFO("Configuration mode services started");
-  
   // 配置模式下保持运行，不进入深度睡眠
   while (true) {
     // 处理串口命令
     serialConfigManager.processInput();
     
+    // 处理Web请求
+    webConfigManager.handleClient();
+    
     delay(100); // 减少延时，提高响应性
-    // 这里可以添加其他配置模式的逻辑
-    // 例如：处理Web请求等
   }
 }
 
@@ -384,11 +388,16 @@ void startAPWebConfigService() {
     LOG_INFO("AP started successfully");
     LOG_INFO_F("AP Name: %s", apName);
     LOG_INFO_F("AP IP: %s", apIP.toString().c_str());
+    
+    // 启动Web配置服务
+    if (webConfigManager.startConfigService()) {
+      LOG_INFO("Web configuration service started successfully");
+    } else {
+      LOG_ERROR("Failed to start web configuration service");
+    }
   } else {
     LOG_ERROR("Failed to start AP");
   }
-  
-  // TODO: 启动Web服务器和配置界面（后续实现）
   
   LOG_INFO("AP+Web configuration service started");
 }
