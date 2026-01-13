@@ -101,6 +101,10 @@ public:
     void clearTimerFlag();
     void enableTimerInterrupt(bool enable);
     
+    // 辅助方法（用于简化常用操作）
+    void resetInterrupts();
+    void setupWakeupTimer(uint16_t seconds);
+    
     // CLKOUT功能
     void setCLKOUTFrequency(uint8_t freq);
     void enableCLKOUT(bool enable);

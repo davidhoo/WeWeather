@@ -172,6 +172,28 @@ void BM8563::enableTimerInterrupt(bool enable) {
     writeRegister(BM8563_CTRL_STATUS2, value);
 }
 
+/**
+ * @brief 重置所有中断标志和禁用中断
+ * @note 用于清除可能导致 INT 引脚拉低的状态
+ */
+void BM8563::resetInterrupts() {
+    clearTimerFlag();
+    clearAlarmFlag();
+    enableTimerInterrupt(false);
+    enableAlarmInterrupt(false);
+}
+
+/**
+ * @brief 配置深度睡眠唤醒定时器
+ * @param seconds 睡眠时间（秒）
+ * @note 自动清除中断标志并设置定时器
+ */
+void BM8563::setupWakeupTimer(uint16_t seconds) {
+    resetInterrupts();
+    setTimer(seconds, BM8563_TIMER_1HZ);
+    enableTimerInterrupt(true);
+}
+
 void BM8563::setCLKOUTFrequency(uint8_t freq) {
     uint8_t value;
     readRegister(BM8563_CLKOUT, &value);
