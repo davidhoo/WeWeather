@@ -1,4 +1,5 @@
 #include "TimeManager.h"
+#include "../LogManager/LogManager.h"
 
 // NTP 服务器配置
 const char* TimeManager::NTP_SERVERS[] = {
@@ -13,34 +14,35 @@ TimeManager::TimeManager(BM8563* rtc) {
     _timeValid = false;
     initializeCurrentTime();
 }
-
 bool TimeManager::begin() {
     if (_rtc == nullptr) {
-        Serial.println("TimeManager: RTC pointer is null");
+        LOG_ERROR("TimeManager: RTC pointer is null");
         return false;
     }
     
-    Serial.println("TimeManager: Initializing...");
+    LOG_INFO("TimeManager: Initializing...");
     
     // 从 RTC 读取时间
     if (readTimeFromRTC()) {
         _timeValid = true;
-        Serial.println("TimeManager: Time loaded from RTC");
-        printTimeDebug("TimeManager: Current time", _currentTime);
+        LOG_INFO("TimeManager: Time loaded from RTC");
+        LOG_DEBUG_F("TimeManager: Current time: %04d/%02d/%02d %02d:%02d:%02d",
+                    2000 + _currentTime.year, _currentTime.month, _currentTime.day,
+                    _currentTime.hour, _currentTime.minute, _currentTime.second);
         return true;
     } else {
-        Serial.println("TimeManager: Failed to read time from RTC");
+        LOG_ERROR("TimeManager: Failed to read time from RTC");
         return false;
     }
 }
 
 bool TimeManager::updateNTPTime() {
     if (!_wifiConnected) {
-        Serial.println("TimeManager: WiFi not connected, skipping NTP update");
+        LOG_WARN("TimeManager: WiFi not connected, skipping NTP update");
         return false;
     }
     
-    Serial.println("TimeManager: Updating time from NTP server...");
+    LOG_INFO("TimeManager: Updating time from NTP server...");
     
     // 配置 NTP 服务器和时区 (UTC+8 北京时间)
     configTime(8 * 3600, 0, NTP_SERVERS[0], NTP_SERVERS[1], NTP_SERVERS[2]);
@@ -50,12 +52,12 @@ bool TimeManager::updateNTPTime() {
     while (time(nullptr) < 1000000000 && retryCount < NTP_MAX_RETRIES) {
         delay(500);
         retryCount++;
-        Serial.print(".");
+        LogManager::debug(F("."));
     }
-    Serial.println();
+    LogManager::debug(F(""));
     
     if (retryCount >= NTP_MAX_RETRIES) {
-        Serial.println("TimeManager: Failed to get time from NTP server");
+        LOG_ERROR("TimeManager: Failed to get time from NTP server");
         return false;
     }
     
@@ -75,23 +77,26 @@ bool TimeManager::updateNTPTime() {
     
     // 同步时间到 BM8563 RTC
     if (writeTimeToRTC(_currentTime)) {
-        printTimeDebug("TimeManager: NTP time updated", _currentTime);
+        LOG_DEBUG_F("TimeManager: NTP time updated: %04d/%02d/%02d %02d:%02d:%02d",
+                    2000 + _currentTime.year, _currentTime.month, _currentTime.day,
+                    _currentTime.hour, _currentTime.minute, _currentTime.second);
         return true;
     } else {
-        Serial.println("TimeManager: Failed to write NTP time to RTC");
+        LOG_ERROR("TimeManager: Failed to write NTP time to RTC");
         return false;
     }
 }
 
 bool TimeManager::readTimeFromRTC() {
     if (_rtc == nullptr) {
-        Serial.println("TimeManager: RTC pointer is null");
+        LOG_ERROR("TimeManager: RTC pointer is null");
         return false;
     }
     
     BM8563_Time rtcTime;
     
     if (_rtc->getTime(&rtcTime)) {
+        // 更新 currentTime
         // 更新 currentTime
         _currentTime.second = rtcTime.seconds;
         _currentTime.minute = rtcTime.minutes;
@@ -101,10 +106,12 @@ bool TimeManager::readTimeFromRTC() {
         _currentTime.year = rtcTime.years;
         
         _timeValid = true;
-        printTimeDebug("TimeManager: Time read from RTC", _currentTime);
+        LOG_DEBUG_F("TimeManager: Time read from RTC: %04d/%02d/%02d %02d:%02d:%02d",
+                    2000 + _currentTime.year, _currentTime.month, _currentTime.day,
+                    _currentTime.hour, _currentTime.minute, _currentTime.second);
         return true;
     } else {
-        Serial.println("TimeManager: Failed to read time from RTC");
+        LOG_ERROR("TimeManager: Failed to read time from RTC");
         _timeValid = false;
         return false;
     }
@@ -112,7 +119,7 @@ bool TimeManager::readTimeFromRTC() {
 
 bool TimeManager::writeTimeToRTC(const DateTime& dt) {
     if (_rtc == nullptr) {
-        Serial.println("TimeManager: RTC pointer is null");
+        LOG_ERROR("TimeManager: RTC pointer is null");
         return false;
     }
     
@@ -128,14 +135,15 @@ bool TimeManager::writeTimeToRTC(const DateTime& dt) {
     rtcTime.years = dt.year;
     
     if (_rtc->setTime(&rtcTime)) {
-        printTimeDebug("TimeManager: Time written to RTC", dt);
+        LOG_DEBUG_F("TimeManager: Time written to RTC: %04d/%02d/%02d %02d:%02d:%02d",
+                    2000 + dt.year, dt.month, dt.day,
+                    dt.hour, dt.minute, dt.second);
         return true;
     } else {
-        Serial.println("TimeManager: Failed to write time to RTC");
+        LOG_ERROR("TimeManager: Failed to write time to RTC");
         return false;
     }
 }
-
 DateTime TimeManager::getCurrentTime() const {
     return _currentTime;
 }
@@ -148,9 +156,9 @@ void TimeManager::setCurrentTime(const DateTime& dt) {
 void TimeManager::setWiFiConnected(bool connected) {
     _wifiConnected = connected;
     if (connected) {
-        Serial.println("TimeManager: WiFi connected, NTP sync available");
+        LOG_INFO("TimeManager: WiFi connected, NTP sync available");
     } else {
-        Serial.println("TimeManager: WiFi disconnected, NTP sync unavailable");
+        LOG_INFO("TimeManager: WiFi disconnected, NTP sync unavailable");
     }
 }
 
@@ -160,11 +168,11 @@ bool TimeManager::isTimeValid() const {
 
 String TimeManager::getFormattedTimeString() const {
     if (!_timeValid) {
-        return "Invalid Time";
+        return F("Invalid Time");
     }
     
     char buffer[32];
-    snprintf(buffer, sizeof(buffer), "20%02d/%02d/%02d %02d:%02d:%02d", 
+    snprintf(buffer, sizeof(buffer), "20%02d/%02d/%02d %02d:%02d:%02d",
              _currentTime.year, _currentTime.month, _currentTime.day,
              _currentTime.hour, _currentTime.minute, _currentTime.second);
     return String(buffer);
@@ -181,19 +189,9 @@ void TimeManager::initializeCurrentTime() {
 }
 
 void TimeManager::printTimeDebug(const char* prefix, const DateTime& dt) {
-    Serial.print(prefix);
-    Serial.print(": ");
-    Serial.print(2000 + dt.year);
-    Serial.print("/");
-    Serial.print(dt.month);
-    Serial.print("/");
-    Serial.print(dt.day);
-    Serial.print(" ");
-    Serial.print(dt.hour);
-    Serial.print(":");
-    Serial.print(dt.minute);
-    Serial.print(":");
-    Serial.println(dt.second);
+    LOG_DEBUG_F("%s: %04d/%02d/%02d %02d:%02d:%02d",
+                prefix, 2000 + dt.year, dt.month, dt.day,
+                dt.hour, dt.minute, dt.second);
 }
 
 String TimeManager::getFormattedTime(const DateTime& currentTime) {

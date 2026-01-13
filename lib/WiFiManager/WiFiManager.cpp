@@ -1,5 +1,6 @@
 #include "WiFiManager.h"
 #include "../../config.h"
+#include "../LogManager/LogManager.h"
 
 extern "C" {
 #include "user_interface.h"
@@ -14,7 +15,7 @@ void WiFiManager::begin() {
   WiFi.mode(WIFI_STA);
   WiFi.begin();
   _initialized = true;
-  Serial.println("WiFiManager initialized with default config");
+  LOG_INFO("WiFiManager initialized with default config");
   printConfig();
 }
 
@@ -23,11 +24,11 @@ void WiFiManager::begin(const WiFiConfig& config) {
   WiFi.mode(WIFI_STA);
   WiFi.begin();
   _initialized = true;
-  Serial.println("WiFiManager initialized with custom config");
+  LOG_INFO("WiFiManager initialized with custom config");
   printConfig();
 }
+
 void WiFiManager::setDefaultConfig() {
-  // 设置默认的 WiFi 配置
   _copyString(_config.ssid, DEFAULT_WIFI_SSID, sizeof(_config.ssid));
   _copyString(_config.password, DEFAULT_WIFI_PASSWORD, sizeof(_config.password));
   _config.timeout = WIFI_CONNECT_TIMEOUT;
@@ -40,13 +41,12 @@ void WiFiManager::setDefaultConfig() {
 void WiFiManager::setCredentials(const char* ssid, const char* password) {
   _copyString(_config.ssid, ssid, sizeof(_config.ssid));
   _copyString(_config.password, password, sizeof(_config.password));
-  
-  Serial.println("WiFi credentials updated for SSID: " + String(_config.ssid));
+  LogManager::info(String(F("WiFi credentials updated for SSID: ")) + _config.ssid);
 }
 
 void WiFiManager::setConfig(const WiFiConfig& config) {
   _config = config;
-  Serial.println("WiFi configuration updated");
+  LOG_INFO("WiFi configuration updated");
 }
 
 WiFiConfig WiFiManager::getConfig() const {
@@ -55,135 +55,120 @@ WiFiConfig WiFiManager::getConfig() const {
 
 bool WiFiManager::connect(unsigned long timeout) {
   if (!_initialized) {
-    Serial.println("WiFiManager not initialized. Call begin() first.");
+    LOG_WARN("WiFiManager not initialized. Call begin() first.");
     return false;
   }
-  
+
   if (strlen(_config.ssid) == 0) {
-    Serial.println("WiFi SSID not set. Call setCredentials() first.");
+    LOG_WARN("WiFi SSID not set. Call setCredentials() first.");
     return false;
   }
-  
-  // 如果启用了自定义MAC地址，先设置MAC地址
+
   if (_config.useMacAddress && strlen(_config.macAddress) > 0) {
-    Serial.println("Setting custom MAC address: " + String(_config.macAddress));
-    
-    // 将MAC地址字符串转换为字节数组
+    LogManager::info(String(F("Setting custom MAC address: ")) + _config.macAddress);
     uint8_t mac[6];
     if (_parseMacAddress(_config.macAddress, mac)) {
       if (wifi_set_macaddr(STATION_IF, mac)) {
-        Serial.println("MAC address set successfully");
+        LOG_INFO("MAC address set successfully");
       } else {
-        Serial.println("Failed to set MAC address");
+        LOG_WARN("Failed to set MAC address");
       }
     } else {
-      Serial.println("Invalid MAC address format, using default MAC");
+      LOG_WARN("Invalid MAC address format, using default MAC");
     }
   }
-  
+
   unsigned long connectTimeout = (timeout == 0) ? _config.timeout : timeout;
-  
-  Serial.println("Connecting to WiFi: " + String(_config.ssid));
+
+  LogManager::info(String(F("Connecting to WiFi: ")) + _config.ssid);
   WiFi.begin(_config.ssid, _config.password);
-  
+
   return _waitForConnection(connectTimeout);
 }
 
 bool WiFiManager::scanAndConnect(unsigned long timeout) {
   if (!_initialized) {
-    Serial.println("WiFiManager not initialized. Call begin() first.");
+    LOG_WARN("WiFiManager not initialized. Call begin() first.");
     return false;
   }
-  
+
   if (strlen(_config.ssid) == 0) {
-    Serial.println("WiFi SSID not set. Call setCredentials() first.");
+    LOG_WARN("WiFi SSID not set. Call setCredentials() first.");
     return false;
   }
-  
+
   unsigned long connectTimeout = (timeout == 0) ? _config.timeout : timeout;
-  
-  Serial.println("Scanning for WiFi networks...");
-  
-  // 扫描WiFi网络
+
+  LOG_INFO("Scanning for WiFi networks...");
   int n = WiFi.scanNetworks();
-  Serial.println("Scan done");
-  
+  LOG_INFO("Scan done");
+
   if (n == 0) {
-    Serial.println("No WiFi networks found");
+    LOG_WARN("No WiFi networks found");
     return false;
   }
-  
-  Serial.print(n);
-  Serial.println(" networks found");
-  
-  // 查找目标网络
+
+  LogManager::info(String(n) + F(" networks found"));
+
   for (int i = 0; i < n; ++i) {
     _printNetworkInfo(i);
-    
-    // 检查是否为目标SSID
     if (WiFi.SSID(i) == String(_config.ssid)) {
-      Serial.println("Found target network: " + String(_config.ssid));
-      
-      // 如果启用了自定义MAC地址，先设置MAC地址
+      LogManager::info(String(F("Found target network: ")) + _config.ssid);
+
       if (_config.useMacAddress && strlen(_config.macAddress) > 0) {
-        Serial.println("Setting custom MAC address: " + String(_config.macAddress));
-        
-        // 将MAC地址字符串转换为字节数组
+        LogManager::info(String(F("Setting custom MAC address: ")) + _config.macAddress);
         uint8_t mac[6];
         if (_parseMacAddress(_config.macAddress, mac)) {
           if (wifi_set_macaddr(STATION_IF, mac)) {
-            Serial.println("MAC address set successfully");
+            LOG_INFO("MAC address set successfully");
           } else {
-            Serial.println("Failed to set MAC address");
+            LOG_WARN("Failed to set MAC address");
           }
         } else {
-          Serial.println("Invalid MAC address format, using default MAC");
+          LOG_WARN("Invalid MAC address format, using default MAC");
         }
       }
-      
-      // 连接到目标网络
+
       WiFi.begin(_config.ssid, _config.password);
-      
-      Serial.println("Connecting to WiFi...");
+      LOG_INFO("Connecting to WiFi...");
       return _waitForConnection(connectTimeout);
     }
   }
-  
-  Serial.println("Target network not found: " + String(_config.ssid));
+
+  LogManager::warn(String(F("Target network not found: ")) + _config.ssid);
   return false;
 }
 
 bool WiFiManager::autoConnect() {
   if (!_initialized) {
-    Serial.println("WiFiManager not initialized. Call begin() first.");
+    LOG_WARN("WiFiManager not initialized. Call begin() first.");
     return false;
   }
-  
+
   int retries = 0;
   bool connected = false;
-  
+
   while (retries < _config.maxRetries && !connected) {
-    Serial.println("Auto-connect attempt " + String(retries + 1) + "/" + String(_config.maxRetries));
-    
+    LogManager::info(String(F("Auto-connect attempt ")) + String(retries + 1) + F("/") + String(_config.maxRetries));
     connected = scanAndConnect();
-    
+
     if (!connected && _config.autoReconnect) {
       retries++;
       if (retries < _config.maxRetries) {
-        Serial.println("Retrying in 2 seconds...");
+        LOG_INFO("Retrying in 2 seconds...");
         delay(2000);
       }
     } else {
       break;
     }
   }
-  
+
   if (connected) {
-    Serial.println("Auto-connect successful");
+    LOG_INFO("Auto-connect successful");
   } else {
-    Serial.println("Auto-connect failed after " + String(_config.maxRetries) + " attempts");
+    LogManager::warn(String(F("Auto-connect failed after ")) + String(_config.maxRetries) + F(" attempts"));
   }
-  
+
   return connected;
 }
 
@@ -193,14 +178,14 @@ bool WiFiManager::isConnected() {
 
 void WiFiManager::disconnect() {
   WiFi.disconnect();
-  Serial.println("WiFi disconnected");
+  LOG_INFO("WiFi disconnected");
 }
 
 String WiFiManager::getLocalIP() {
   if (isConnected()) {
     return WiFi.localIP().toString();
   }
-  return "0.0.0.0";
+  return String(F("0.0.0.0"));
 }
 
 int WiFiManager::getRSSI() {
@@ -240,7 +225,7 @@ void WiFiManager::setMaxRetries(int retries) {
 
 void WiFiManager::setMacAddress(const char* macAddress) {
   _copyString(_config.macAddress, macAddress, sizeof(_config.macAddress));
-  Serial.println("MAC address updated: " + String(_config.macAddress));
+  LogManager::info(String(F("MAC address updated: ")) + _config.macAddress);
 }
 
 String WiFiManager::getMacAddress() {
@@ -252,74 +237,65 @@ String WiFiManager::getMacAddress() {
 
 void WiFiManager::enableMacAddress(bool enable) {
   _config.useMacAddress = enable;
-  Serial.println("Custom MAC address " + String(enable ? "enabled" : "disabled"));
+  LogManager::info(String(F("Custom MAC address ")) + String(enable ? F("enabled") : F("disabled")));
 }
 
 String WiFiManager::getStatusString() {
   switch (WiFi.status()) {
     case WL_CONNECTED:
-      return "Connected";
+      return String(F("Connected"));
     case WL_NO_SSID_AVAIL:
-      return "SSID not available";
+      return String(F("SSID not available"));
     case WL_CONNECT_FAILED:
-      return "Connection failed";
+      return String(F("Connection failed"));
     case WL_WRONG_PASSWORD:
-      return "Wrong password";
+      return String(F("Wrong password"));
     case WL_DISCONNECTED:
-      return "Disconnected";
+      return String(F("Disconnected"));
     case WL_IDLE_STATUS:
-      return "Idle";
+      return String(F("Idle"));
     default:
-      return "Unknown status";
+      return String(F("Unknown status"));
   }
 }
 
 void WiFiManager::printConfig() {
-  Serial.println("=== WiFi Configuration ===");
-  Serial.println("SSID: " + String(_config.ssid));
-  Serial.println("password: " + String(_config.password[0] ? "***" : "Not set"));
-  Serial.println("Timeout: " + String(_config.timeout) + "ms");
-  Serial.println("Auto Reconnect: " + String(_config.autoReconnect ? "Enabled" : "Disabled"));
-  Serial.println("Max Retries: " + String(_config.maxRetries));
-  Serial.println("MAC Address: " + String(_config.useMacAddress ? _config.macAddress : "Default"));
-  Serial.println("Use Custom MAC: " + String(_config.useMacAddress ? "Yes" : "No"));
-  Serial.println("========================");
+  LogManager::info(F("=== WiFi Configuration ==="));
+  LogManager::info(String(F("SSID: ")) + _config.ssid);
+  LogManager::info(String(F("password: ")) + String(_config.password[0] ? F("***") : F("Not set")));
+  LogManager::info(String(F("Timeout: ")) + String(_config.timeout) + F("ms"));
+  LogManager::info(String(F("Auto Reconnect: ")) + String(_config.autoReconnect ? F("Enabled") : F("Disabled")));
+  LogManager::info(String(F("Max Retries: ")) + String(_config.maxRetries));
+  String macDisplay = _config.useMacAddress ? String(_config.macAddress) : String(F("Default"));
+  LogManager::info(String(F("MAC Address: ")) + macDisplay);
+  LogManager::info(String(F("Use Custom MAC: ")) + String(_config.useMacAddress ? F("Yes") : F("No")));
+  LogManager::info(F("========================"));
 }
 
 void WiFiManager::_printNetworkInfo(int networkIndex) {
-  Serial.print(networkIndex + 1);
-  Serial.print(": ");
-  Serial.print(WiFi.SSID(networkIndex));
-  Serial.print(" (");
-  Serial.print(WiFi.RSSI(networkIndex));
-  Serial.print(")");
-  Serial.println((WiFi.encryptionType(networkIndex) == ENC_TYPE_NONE) ? " " : "*");
+  LogManager::info(String(networkIndex + 1) + F(": ") + WiFi.SSID(networkIndex) +
+                   F(" (") + String(WiFi.RSSI(networkIndex)) + F(")") +
+                   String((WiFi.encryptionType(networkIndex) == ENC_TYPE_NONE) ? F(" ") : F("*")));
 }
 
 bool WiFiManager::_waitForConnection(unsigned long timeout) {
   unsigned long startAttemptTime = millis();
-  
-  // 等待连接结果
-  while (WiFi.status() != WL_CONNECTED &&
-         millis() - startAttemptTime < timeout) {
+
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < timeout) {
     delay(100);
-    Serial.print(".");
+    LogManager::debug(F("."));
   }
-  
-  // 检查连接结果
+
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("");
-    Serial.println("WiFi connected successfully");
-    Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());
-    Serial.print("Signal strength: ");
-    Serial.print(WiFi.RSSI());
-    Serial.println(" dBm");
+    LogManager::info(F(""));
+    LOG_INFO("WiFi connected successfully");
+    LogManager::info(String(F("IP address: ")) + WiFi.localIP().toString());
+    LogManager::info(String(F("Signal strength: ")) + String(WiFi.RSSI()) + F(" dBm"));
     return true;
   } else {
-    Serial.println("");
-    Serial.println("Failed to connect to WiFi");
-    Serial.println("Status: " + getStatusString());
+    LogManager::info(F(""));
+    LOG_WARN("Failed to connect to WiFi");
+    LogManager::warn(String(F("Status: ")) + getStatusString());
     return false;
   }
 }
@@ -330,31 +306,28 @@ void WiFiManager::_copyString(char* dest, const char* src, size_t maxLen) {
 }
 
 bool WiFiManager::_parseMacAddress(const char* macStr, uint8_t* macBytes) {
-  // 解析MAC地址字符串 (格式: "AA:BB:CC:DD:EE:FF")
   if (strlen(macStr) != 17) {
     return false;
   }
-  
+
   for (int i = 0; i < 6; i++) {
     char hex[3];
     hex[0] = macStr[i * 3];
     hex[1] = macStr[i * 3 + 1];
     hex[2] = '\0';
-    
-    // 检查分隔符
+
     if (i < 5 && macStr[i * 3 + 2] != ':') {
       return false;
     }
-    
-    // 转换十六进制字符串为字节
+
     char* endPtr;
     long val = strtol(hex, &endPtr, 16);
     if (*endPtr != '\0' || val < 0 || val > 255) {
       return false;
     }
-    
-    macBytes[i] = (uint8_t)val;
+
+    macBytes[i] = static_cast<uint8_t>(val);
   }
-  
+
   return true;
 }

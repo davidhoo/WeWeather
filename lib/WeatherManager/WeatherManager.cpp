@@ -1,4 +1,5 @@
 #include "WeatherManager.h"
+#include "../LogManager/LogManager.h"
 #include "../../config.h"
 
 WeatherManager::WeatherManager(const char* apiKey, const String& cityCode, BM8563* rtc, int eepromSize)
@@ -19,11 +20,11 @@ WeatherManager::~WeatherManager() {
 
 void WeatherManager::begin() {
   _configManager->begin();
-  Serial.println("WeatherManager initialized");
+  LOG_INFO("WeatherManager initialized");
   
   // 尝试从配置读取天气信息
   if (!readWeatherFromStorage()) {
-    Serial.println("Using default weather values");
+    LOG_INFO("Using default weather values");
   }
 }
 
@@ -33,16 +34,16 @@ WeatherInfo WeatherManager::getCurrentWeather() {
 
 bool WeatherManager::updateWeather(bool forceUpdate) {
   if (forceUpdate || shouldUpdateFromNetwork()) {
-    Serial.println("Updating weather from network...");
+    LOG_INFO("Updating weather from network...");
     if (fetchWeatherFromNetwork()) {
       writeWeatherToStorage();
       return true;
     } else {
-      Serial.println("Failed to fetch weather from network, using cached data");
+      LOG_WARN("Failed to fetch weather from network, using cached data");
       return false;
     }
   } else {
-    Serial.println("Using cached weather data");
+    LOG_INFO("Using cached weather data");
     return true;
   }
 }
@@ -52,7 +53,7 @@ bool WeatherManager::shouldUpdateFromNetwork() {
   
   // 如果从未更新过，应该更新
   if (lastUpdateTime == 0) {
-    Serial.println("No previous weather data, need to update from network");
+    LOG_INFO("No previous weather data, need to update from network");
     return true;
   }
   
@@ -60,7 +61,7 @@ bool WeatherManager::shouldUpdateFromNetwork() {
   
   // 如果无法获取当前时间，需要更新
   if (currentTime == 0 || currentTime == 1 || currentTime == (time_t)-1) {
-    Serial.println("Cannot get current time, need to update from network");
+    LOG_WARN("Cannot get current time, need to update from network");
     return true;
   }
   
@@ -70,16 +71,9 @@ bool WeatherManager::shouldUpdateFromNetwork() {
   // 检查是否超过了更新间隔
   bool shouldUpdate = timeDiffSeconds >= _updateIntervalSeconds;
   
-  Serial.print("Current Unix time: ");
-  Serial.print(currentTime);
-  Serial.print(", Last update: ");
-  Serial.print(lastUpdateTime);
-  Serial.print(", Diff: ");
-  Serial.print(timeDiffSeconds);
-  Serial.print(" seconds (");
-  Serial.print(timeDiffSeconds / 60);
-  Serial.print(" minutes), ");
-  Serial.println(shouldUpdate ? "need to update from network" : "using cached data");
+  LOG_INFO_F("Current Unix time: %lu, Last update: %lu, Diff: %lu seconds (%lu minutes), %s",
+             currentTime, lastUpdateTime, timeDiffSeconds,
+             timeDiffSeconds / 60, shouldUpdate ? "need to update from network" : "using cached data");
   
   return shouldUpdate;
 }
@@ -91,7 +85,7 @@ bool WeatherManager::fetchWeatherFromNetwork() {
   // API URL
   String url = "https://restapi.amap.com/v3/weather/weatherInfo?key=" + String(_apiKey) + "&city=" + _cityCode + "&extensions=base&output=JSON";
   
-  Serial.println("Fetching weather data from: " + url);
+  LogManager::info(String(F("Fetching weather data from: ")) + url);
   
   client.setInsecure(); // 跳过SSL证书验证
   http.begin(client, url);
@@ -101,14 +95,14 @@ bool WeatherManager::fetchWeatherFromNetwork() {
   
   if (httpResponseCode == 200) {
     String payload = http.getString();
-    Serial.println("Weather data received: " + payload);
+    LogManager::info(String(F("Weather data received: ")) + payload);
     
     // 解析JSON数据
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, payload);
     
     if (error) {
-      Serial.println("Failed to parse JSON: " + String(error.c_str()));
+      LogManager::warn(String(F("Failed to parse JSON: ")) + String(error.c_str()));
       http.end();
       return false;
     }
@@ -116,7 +110,7 @@ bool WeatherManager::fetchWeatherFromNetwork() {
     // 检查status是否为"1"
     String status = doc["status"].as<String>();
     if (status != "1") {
-      Serial.println("API returned error status: " + status);
+      LogManager::warn(String(F("API returned error status: ")) + status);
       http.end();
       return false;
     }
@@ -134,18 +128,18 @@ bool WeatherManager::fetchWeatherFromNetwork() {
     // 根据天气状况设置符号
     _currentWeather.Symbol = mapWeatherToSymbol(_currentWeather.Weather);
     
-    Serial.println("Weather updated successfully");
-    Serial.println("Temperature: " + String(_currentWeather.Temperature));
-    Serial.println("Humidity: " + String(_currentWeather.Humidity));
-    Serial.println("Wind Direction: " + _currentWeather.WindDirection);
-    Serial.println("Wind Speed: " + _currentWeather.WindSpeed);
-    Serial.println("Weather: " + _currentWeather.Weather);
-    Serial.println("Symbol: " + String(_currentWeather.Symbol));
+    LOG_INFO("Weather updated successfully");
+    LogManager::info(String(F("Temperature: ")) + String(_currentWeather.Temperature));
+    LogManager::info(String(F("Humidity: ")) + String(_currentWeather.Humidity));
+    LogManager::info(String(F("Wind Direction: ")) + _currentWeather.WindDirection);
+    LogManager::info(String(F("Wind Speed: ")) + _currentWeather.WindSpeed);
+    LogManager::info(String(F("Weather: ")) + _currentWeather.Weather);
+    LogManager::info(String(F("Symbol: ")) + String(_currentWeather.Symbol));
     
     http.end();
     return true;
   } else {
-    Serial.println("HTTP request failed with code: " + String(httpResponseCode));
+    LogManager::warn(String(F("HTTP request failed with code: ")) + String(httpResponseCode));
     http.end();
     return false;
   }
@@ -156,28 +150,24 @@ bool WeatherManager::readWeatherFromStorage() {
   
   // 使用ConfigManager读取数据
   if (!_configManager->read(configData)) {
-    Serial.println("Failed to read weather config from storage, using default values");
+    LOG_WARN("Failed to read weather config from storage, using default values");
     return false;
   }
   
   // 检查上次更新时间是否为0（首次使用）
   if (configData.lastUpdateTime == 0) {
-    Serial.println("No weather config stored, using default values");
+    LOG_INFO("No weather config stored, using default values");
     return false;
   }
   
   // 转换数据格式
   convertFromConfigData(configData, _currentWeather);
   
-  Serial.println("Weather config read from storage successfully");
-  Serial.print("Temperature: ");
-  Serial.println(_currentWeather.Temperature);
-  Serial.print("Humidity: ");
-  Serial.println(_currentWeather.Humidity);
-  Serial.print("Weather: ");
-  Serial.println(_currentWeather.Weather);
-  Serial.print("Last Update: ");
-  Serial.println(configData.lastUpdateTime);
+  LOG_INFO("Weather config read from storage successfully");
+  LogManager::info(String(F("Temperature: ")) + String(_currentWeather.Temperature));
+  LogManager::info(String(F("Humidity: ")) + String(_currentWeather.Humidity));
+  LogManager::info(String(F("Weather: ")) + _currentWeather.Weather);
+  LogManager::info(String(F("Last Update: ")) + String(configData.lastUpdateTime));
   
   return true;
 }
@@ -193,7 +183,7 @@ bool WeatherManager::writeWeatherToStorage() {
   if (currentTime != 0 && currentTime != 1 && currentTime != (time_t)-1) {
     configData.lastUpdateTime = currentTime;
   } else {
-    Serial.println("Failed to get current timestamp for weather update");
+    LOG_ERROR("Failed to get current timestamp for weather update");
     return false;
   }
   
@@ -201,17 +191,13 @@ bool WeatherManager::writeWeatherToStorage() {
   bool success = _configManager->write(configData);
   
   if (success) {
-    Serial.println("Weather config written to storage successfully");
-    Serial.print("Temperature: ");
-    Serial.println(configData.temperature);
-    Serial.print("Humidity: ");
-    Serial.println(configData.humidity);
-    Serial.print("Weather: ");
-    Serial.println(configData.weather);
-    Serial.print("Last Update: ");
-    Serial.println(configData.lastUpdateTime);
+    LOG_INFO("Weather config written to storage successfully");
+    LogManager::info(String(F("Temperature: ")) + String(configData.temperature));
+    LogManager::info(String(F("Humidity: ")) + String(configData.humidity));
+    LogManager::info(String(F("Weather: ")) + String(configData.weather));
+    LogManager::info(String(F("Last Update: ")) + String(configData.lastUpdateTime));
   } else {
-    Serial.println("Failed to write weather config to storage");
+    LOG_ERROR("Failed to write weather config to storage");
   }
   
   return success;
@@ -237,7 +223,7 @@ bool WeatherManager::setUpdateTime(unsigned long timestamp) {
   
   // 读取现有的数据
   if (!_configManager->read(configData)) {
-    Serial.println("Weather config not found, cannot update timestamp");
+    LOG_ERROR("Weather config not found, cannot update timestamp");
     return false;
   }
   
@@ -248,11 +234,10 @@ bool WeatherManager::setUpdateTime(unsigned long timestamp) {
   bool success = _configManager->write(configData);
   
   if (success) {
-    Serial.println("Timestamp updated successfully");
-    Serial.print("New timestamp: ");
-    Serial.println(timestamp);
+    LOG_INFO("Timestamp updated successfully");
+    LogManager::info(String(F("New timestamp: ")) + String(timestamp));
   } else {
-    Serial.println("Failed to update timestamp");
+    LOG_ERROR("Failed to update timestamp");
   }
   
   return success;
@@ -261,7 +246,7 @@ bool WeatherManager::setUpdateTime(unsigned long timestamp) {
 void WeatherManager::clearWeatherData() {
   // 使用ConfigManager清除数据
   _configManager->clear();
-  Serial.println("Weather config cleared from storage");
+  LOG_INFO("Weather config cleared from storage");
 }
 
 char WeatherManager::mapWeatherToSymbol(const String& weather) {
@@ -344,18 +329,13 @@ void WeatherManager::convertToConfigData(const WeatherInfo& weatherInfo, ConfigD
 }
 
 void WeatherManager::convertFromConfigData(const ConfigData& configData, WeatherInfo& weatherInfo) {
-  // 只转换天气相关的字段到 WeatherInfo
   weatherInfo.Temperature = configData.temperature;
   weatherInfo.Humidity = configData.humidity;
   weatherInfo.Symbol = configData.symbol;
   weatherInfo.WindDirection = String(configData.windDirection);
   weatherInfo.WindSpeed = String(configData.windSpeed);
   weatherInfo.Weather = String(configData.weather);
-  
-  // 其他配置项（API、WiFi、硬件配置）不需要转换到 WeatherInfo
-  // 它们可以通过其他方法从 ConfigData 中直接访问
 }
-
 
 unsigned long WeatherManager::getCurrentUnixTimestamp() {
   // 尝试从系统获取当前Unix时间戳
@@ -363,12 +343,12 @@ unsigned long WeatherManager::getCurrentUnixTimestamp() {
   
   // 如果系统时间不可用，从RTC获取时间并转换为Unix时间戳
   if (now == 0 || now == 1) {
-    Serial.println("System time not available, using RTC time");
+    LOG_WARN("System time not available, using RTC time");
     
     // 从RTC获取时间
     BM8563_Time rtcTime;
     if (!_rtc->getTime(&rtcTime)) {
-      Serial.println("Failed to read time from RTC");
+      LOG_ERROR("Failed to read time from RTC");
       return 0;
     }
     
@@ -393,12 +373,11 @@ unsigned long WeatherManager::getCurrentUnixTimestamp() {
     }
     
     if (now == (time_t)-1) {
-      Serial.println("Failed to convert RTC time to Unix timestamp");
+      LOG_ERROR("Failed to convert RTC time to Unix timestamp");
       return 0;
     }
     
-    Serial.print("RTC time converted to Unix timestamp: ");
-    Serial.println(now);
+    LOG_DEBUG_F("RTC time converted to Unix timestamp: %ld", static_cast<long>(now));
   }
   
   return now;
@@ -424,19 +403,14 @@ String WeatherManager::formatWindSpeed(const String& windSpeed) {
 }
 
 String WeatherManager::getWeatherInfo(const WeatherInfo& currentWeather) {
-  // 格式化天气信息用于显示
   String weatherString = "";
-  
-  // 按照新格式显示天气信息: 22C 46% NortheEast ≤3
   weatherString += String(currentWeather.Temperature, 0) + "C ";
   weatherString += String(currentWeather.Humidity) + "% ";
   weatherString += translateWindDirection(currentWeather.WindDirection) + " ";
   weatherString += formatWindSpeed(currentWeather.WindSpeed);
-  
   return weatherString;
 }
 
 char WeatherManager::getWeatherSymbol(const WeatherInfo& currentWeather) {
-  // 返回天气符号字符
   return currentWeather.Symbol;
 }

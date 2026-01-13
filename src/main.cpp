@@ -4,6 +4,7 @@
 #include <Wire.h>
 #include <ESP8266mDNS.h>
 #include "../config.h"
+#include "../lib/LogManager/LogManager.h"
 #include "../lib/BM8563/BM8563.h"
 #include "../lib/GDEY029T94/GDEY029T94.h"
 #include "../lib/WeatherManager/WeatherManager.h"
@@ -37,20 +38,20 @@ BatteryMonitor battery;
 
 // 深度睡眠相关函数声明
 void goToDeepSleep();
-
 void setup() {
-  Serial.begin(SERIAL_BAUD_RATE);
+  // 初始化日志管理器
+  LogManager::begin(SERIAL_BAUD_RATE, LOG_INFO);
   
-  Serial.println("System starting up...");
+  LOG_INFO("System starting up...");
   
   // 初始化WeatherManager
   weatherManager.begin();
   
   // 初始化SHT40温湿度传感器
   if (sht40.begin()) {
-    Serial.println("SHT40 initialized successfully");
+    LOG_INFO("SHT40 initialized successfully");
   } else {
-    Serial.println("Failed to initialize SHT40");
+    LOG_ERROR("Failed to initialize SHT40");
   }
   
   // 初始化GDEY029T94墨水屏
@@ -61,19 +62,19 @@ void setup() {
   
   // 初始化BM8563 RTC
   if (rtc.begin()) {
-    Serial.println("BM8563 RTC initialized successfully");
+    LOG_INFO("BM8563 RTC initialized successfully");
     
     // 清除RTC中断标志
     rtc.clearTimerFlag();
     rtc.clearAlarmFlag();
-    Serial.println("RTC interrupt flags cleared");
+    LOG_INFO("RTC interrupt flags cleared");
     
     // 确保中断被禁用，防止INT持续拉低
     rtc.enableTimerInterrupt(false);
     rtc.enableAlarmInterrupt(false);
-    Serial.println("RTC interrupts disabled");
+    LOG_INFO("RTC interrupts disabled");
   } else {
-    Serial.println("Failed to initialize BM8563 RTC");
+    LOG_ERROR("Failed to initialize BM8563 RTC");
   }
   
   // 初始化TimeManager并从RTC读取时间
@@ -81,7 +82,7 @@ void setup() {
   
   // 判断是否需要从网络更新天气
   if (weatherManager.shouldUpdateFromNetwork()) {
-    Serial.println("Weather data is outdated, updating from network...");
+    LOG_INFO("Weather data is outdated, updating from network...");
     
     // 初始化WiFi连接（使用默认配置）
     wifiManager.begin();
@@ -92,11 +93,11 @@ void setup() {
       timeManager.updateNTPTime();
       weatherManager.updateWeather(true);
     } else {
-      Serial.println("WiFi connection failed, using cached data");
+      LOG_WARN("WiFi connection failed, using cached data");
       timeManager.setWiFiConnected(false);
     }
   } else {
-    Serial.println("Weather data is recent, using cached data");
+    LOG_INFO("Weather data is recent, using cached data");
   }
   
   // 获取当前天气信息并显示
@@ -106,10 +107,10 @@ void setup() {
   // 读取温湿度数据（一次性读取，避免重复测量）
   float temperature, humidity;
   if (sht40.readTemperatureHumidity(temperature, humidity)) {
-    Serial.println("Current Temperature: " + String(temperature) + " °C");
-    Serial.println("Current Humidity: " + String(humidity) + " %RH");
+    LOG_INFO_F("Current Temperature: %.1f °C", temperature);
+    LOG_INFO_F("Current Humidity: %.1f %%RH", humidity);
   } else {
-    Serial.println("Failed to read SHT40 sensor");
+    LOG_ERROR("Failed to read SHT40 sensor");
     temperature = NAN;
     humidity = NAN;
   }
@@ -122,11 +123,13 @@ void setup() {
   float batteryPercentage = battery.getBatteryPercentage();
   
   // 打印电池状态信息
-  Serial.println("=== 电池状态 ===");
-  Serial.println("原始 ADC 值: " + String(rawADC));
-  Serial.println("电池电压: " + String(batteryVoltage, 2) + " V");
-  Serial.println("电池电量: " + String(batteryPercentage, 1) + " %");
-  Serial.println("================");
+  LogManager::printSeparator('=', 15);
+  LogManager::info(F("电池状态"));
+  LogManager::printSeparator('=', 15);
+  LogManager::printKeyValue(F("原始 ADC 值"), rawADC);
+  LogManager::printKeyValue(F("电池电压"), batteryVoltage, 2);
+  LogManager::printKeyValue(F("电池电量"), batteryPercentage, 1);
+  LogManager::printSeparator('=', 15);
   
 
   epd.showTimeDisplay(currentTime, currentWeather, temperature, humidity, batteryPercentage);
@@ -142,21 +145,21 @@ void loop() {
 
 // 设置并进入深度睡眠
 void goToDeepSleep() {
-  Serial.println("Setting up and entering deep sleep...");
+  LOG_INFO("Setting up and entering deep sleep...");
   
   // 清除之前的定时器标志和闹钟标志
   rtc.clearTimerFlag();
   rtc.clearAlarmFlag();
-  Serial.println("RTC interrupt flags cleared");
+  LOG_INFO("RTC interrupt flags cleared");
   
   // 设置RTC定时器，使用配置中的时间
   rtc.setTimer(RTC_TIMER_SECONDS, BM8563_TIMER_1HZ);
   
   // 启用定时器中断
   rtc.enableTimerInterrupt(true);
-  Serial.println("Timer interrupt enabled");
+  LOG_INFO("Timer interrupt enabled");
   
-  Serial.println("Entering deep sleep...");
+  LOG_INFO("Entering deep sleep...");
   Serial.flush();
   
   // 等待串口输出完成
