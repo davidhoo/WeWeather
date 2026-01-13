@@ -1,5 +1,6 @@
 #include "GDEY029T94.h"
 #include "../WeatherManager/WeatherManager.h"
+#include "../LogManager/LogManager.h"
 
 GDEY029T94::GDEY029T94(uint8_t cs, uint8_t dc, uint8_t rst, uint8_t busy)
   : display(GxEPD2_290_GDEY029T94(cs, dc, rst, busy)), 
@@ -21,13 +22,10 @@ void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo&
   String weatherStr = WeatherManager::getWeatherInfo(currentWeather);
   
   // 调试输出移到循环外部，避免重复打印
-  Serial.print("Temperature: ");
-  Serial.print(temperature);
-  Serial.print(", Humidity: ");
-  Serial.println(humidity);
+  LOG_DEBUG_F("Temperature: %.1f, Humidity: %.1f", temperature, humidity);
   
   if (!isnan(temperature) && !isnan(humidity)) {
-    Serial.println("Displaying temperature and humidity...");
+    LOG_DEBUG("Displaying temperature and humidity...");
     
     // 准备温度和湿度字符串
     char tempStr[16];
@@ -35,15 +33,12 @@ void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo&
     snprintf(tempStr, sizeof(tempStr), "%.0fC", temperature);
     snprintf(humStr, sizeof(humStr), "%.0f%% ", humidity);
     
-    Serial.print("Temp string: ");
-    Serial.println(tempStr);
-    Serial.print("Hum string: ");
-    Serial.println(humStr);
+    LOG_DEBUG_F("Temp string: %s", tempStr);
+    LOG_DEBUG_F("Hum string: %s", humStr);
   }
   
   if (!isnan(batteryPercentage)) {
-    Serial.print("Battery percentage: ");
-    Serial.println(batteryPercentage);
+    LOG_DEBUG_F("Battery percentage: %.1f", batteryPercentage);
   }
   
   display.setFullWindow();
@@ -152,12 +147,9 @@ void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo&
     
     // 显示电池电量（在右下角，与日期同一行）
     if (!isnan(batteryPercentage)) {
-      // 计算电池图标位置（右对齐，与日期同一行）
-      // 电池总宽度 = 22像素（电池主体）+ 3像素（正极帽）= 25像素
       int totalBatteryWidth = 25;
-      int batteryX = alignToPixel8(display.width() - totalBatteryWidth); // 右对齐，距离右边缘10像素
-      int batteryY = dateY; // 与日期相同的Y位置
-      
+      int batteryX = alignToPixel8(display.width() - totalBatteryWidth);
+      int batteryY = dateY;
       drawBatteryIcon(batteryX, batteryY, batteryPercentage);
     }
     
@@ -165,21 +157,17 @@ void GDEY029T94::showTimeDisplay(const DateTime& currentTime, const WeatherInfo&
   
   // 在循环外部输出完成信息
   if (!isnan(temperature) && !isnan(humidity)) {
-    Serial.print("Temp position: X=");
-    Serial.print(alignToPixel8(display.width() - 10));
-    Serial.print(", Y=55");
-    Serial.print("Hum position: X=");
-    Serial.print(alignToPixel8(display.width() - 10));
-    Serial.println(", Y=75");
-    Serial.println("Temperature and humidity displayed");
+    LOG_DEBUG_F("Temp position: X=%d, Y=55", alignToPixel8(display.width() - 10));
+    LOG_DEBUG_F("Hum position: X=%d, Y=75", alignToPixel8(display.width() - 10));
+    LOG_DEBUG("Temperature and humidity displayed");
   } else {
-    Serial.println("Temperature or humidity is NaN, not displaying");
+    LOG_WARN("Temperature or humidity is NaN, not displaying");
   }
   
   if (!isnan(batteryPercentage)) {
-    Serial.println("Battery icon displayed");
+    LOG_DEBUG("Battery icon displayed");
   } else {
-    Serial.println("Battery percentage is NaN, not displaying");
+    LOG_WARN("Battery percentage is NaN, not displaying");
   }
   
   display.hibernate();
@@ -198,48 +186,38 @@ int GDEY029T94::alignToPixel8(int x) {
 }
 
 void GDEY029T94::drawBatteryIcon(int x, int y, float percentage) {
-  // 电池设计参数
-  int barWidth = 2;           // 每格电量用2像素宽
-  int barCount = 10;          // 总共10格
-  int borderThickness = 1;    // 边框厚度
-  int topBottomMargin = 1;    // 上下边距
+  int barWidth = 2;
+  int barCount = 10;
+  int borderThickness = 1;
+  int topBottomMargin = 1;
   
-  // 计算电池尺寸
-  int batteryWidth = barCount * barWidth + 2 * borderThickness + 2; // 10格*2像素 + 左右边框
-  int batteryHeight = 12;     // 保持高度12像素
+  int batteryWidth = barCount * barWidth + 2 * borderThickness + 2;
+  int batteryHeight = 12;
   int capWidth = 3;
   int capHeight = 6;
   
-  // 绘制电池正极帽（左边）
   int capX = x - capWidth;
   int capY = y - batteryHeight/2 - capHeight/2 + 2;
   display.fillRect(capX, capY, capWidth, capHeight, GxEPD_BLACK);
   
-  // 绘制电池外框
   display.drawRect(x, y - batteryHeight + 2, batteryWidth, batteryHeight, GxEPD_BLACK);
   
-  // 计算需要填充的格数（0-10格）
-  int filledBars = (int)((percentage / 100.0) * 10 + 0.5); // 四舍五入
+  int filledBars = (int)((percentage / 100.0) * 10 + 0.5);
   if (filledBars > 10) filledBars = 10;
   if (filledBars < 0) filledBars = 0;
   
-  // 绘制10格电量，每格2像素宽，从右往左排列
-  int barY = y - batteryHeight + 2 + topBottomMargin + 1; // 上边框 + 上边距
-  int barHeight = batteryHeight - 2 * borderThickness - 2 * topBottomMargin; // 减去上下边框和边距
+  int barY = y - batteryHeight + 2 + topBottomMargin + 1;
+  int barHeight = batteryHeight - 2 * borderThickness - 2 * topBottomMargin;
   
-  // 从右边开始绘制
-  int rightX = x + batteryWidth - borderThickness -1; // 右边界（减去右边框）
+  int rightX = x + batteryWidth - borderThickness -1;
   
   for (int i = 0; i < barCount; i++) {
-    int barX = rightX - (i + 1) * barWidth; // 从右往左，每格2像素宽
+    int barX = rightX - (i + 1) * barWidth;
     
     if (i < filledBars) {
-      // 有电量的格子（黑色），从右边开始
       display.fillRect(barX, barY, barWidth, barHeight, GxEPD_BLACK);
     } else {
-      // 无电量的格子（白色）
       display.fillRect(barX, barY, barWidth, barHeight, GxEPD_WHITE);
     }
   }
 }
-

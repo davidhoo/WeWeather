@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <EEPROM.h>
+#include "../LogManager/LogManager.h"
 
 // 统一配置数据结构体（用于EEPROM存储）
 struct ConfigData {
@@ -122,14 +123,14 @@ void ConfigManager<T>::begin() {
   if (!_initialized) {
     EEPROM.begin(_eepromSize);
     _initialized = true;
-    Serial.println("ConfigManager initialized");
+    LOG_INFO("ConfigManager initialized");
   }
 }
 
 template<typename T>
 bool ConfigManager<T>::read(T& data) {
   if (!_initialized) {
-    Serial.println("ConfigManager not initialized");
+    LOG_WARN("ConfigManager not initialized");
     return false;
   }
   
@@ -144,18 +145,18 @@ bool ConfigManager<T>::read(T& data) {
   
   // 验证校验和
   if (storedChecksum != calculatedChecksum) {
-    Serial.println("Config data checksum mismatch");
+    LOG_ERROR("Config data checksum mismatch");
     return false;
   }
   
-  Serial.println("Config data read successfully");
+  LOG_INFO("Config data read successfully");
   return true;
 }
 
 template<typename T>
 bool ConfigManager<T>::write(const T& data) {
   if (!_initialized) {
-    Serial.println("ConfigManager not initialized");
+    LOG_WARN("ConfigManager not initialized");
     return false;
   }
   
@@ -170,18 +171,17 @@ bool ConfigManager<T>::write(const T& data) {
   bool success = EEPROM.commit();
   
   if (success) {
-    Serial.println("Config data written successfully");
+    LOG_INFO("Config data written successfully");
   } else {
-    Serial.println("Failed to write config data");
+    LOG_ERROR("Failed to write config data");
   }
   
   return success;
 }
-
 template<typename T>
 void ConfigManager<T>::clear() {
   if (!_initialized) {
-    Serial.println("ConfigManager not initialized");
+    LOG_WARN("ConfigManager not initialized");
     return;
   }
   
@@ -198,9 +198,8 @@ void ConfigManager<T>::clear() {
   // 提交更改
   EEPROM.commit();
   
-  Serial.println("Config data cleared");
+  LOG_INFO("Config data cleared");
 }
-
 template<typename T>
 bool ConfigManager<T>::isValid() {
   if (!_initialized) {
