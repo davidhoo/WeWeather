@@ -14,6 +14,7 @@
 #include "../lib/BatteryMonitor/BatteryMonitor.h"
 #include "../lib/ConfigManager/ConfigManager.h"
 #include "../lib/SerialConfigManager/SerialConfigManager.h"
+#include "../lib/UnifiedConfigManager/UnifiedConfigManager.h"
 #include "../lib/Fonts/Weather_Symbols_Regular9pt7b.h"
 #include "../lib/Fonts/DSEG7Modern_Bold28pt7b.h"
 
@@ -29,8 +30,11 @@ GDEY029T94 epd(EPD_CS_PIN, EPD_DC_PIN, EPD_RST_PIN, EPD_BUSY_PIN);
 // 创建WiFiManager对象实例
 WiFiManager wifiManager;
 
-// 创建WeatherManager对象实例
-WeatherManager weatherManager(DEFAULT_AMAP_API_KEY, DEFAULT_CITY_CODE, &rtc, 512);
+// 创建统一配置管理器实例
+UnifiedConfigManager unifiedConfigManager(512);
+
+// WeatherManager 指针，将在初始化时创建
+WeatherManager* weatherManager = nullptr;
 
 // 创建SHT40对象实例
 SHT40 sht40(I2C_SDA_PIN, I2C_SCL_PIN);
@@ -66,8 +70,23 @@ void exitConfigMode();
  * 注意：TimeManager 需要在 RTC 初始化之后才能调用
  */
 void initializeManagers() {
+  // 初始化统一配置管理器
+  unifiedConfigManager.begin();
+  
+  // 从配置管理器获取API配置
+  String apiKey = unifiedConfigManager.getAmapApiKey();
+  String cityCode = unifiedConfigManager.getCityCode();
+  
+  LOG_INFO_F("DEBUG: Raw API Key from UnifiedConfigManager: '%s'", apiKey.c_str());
+  LOG_INFO_F("DEBUG: Raw City Code from UnifiedConfigManager: '%s'", cityCode.c_str());
+  LOG_INFO_F("Using API Key: %s", apiKey.length() > 0 ? "***" : "未设置");
+  LOG_INFO_F("Using City Code: %s", cityCode.c_str());
+  
+  // 动态创建WeatherManager实例
+  weatherManager = new WeatherManager(apiKey.c_str(), cityCode, &rtc, 512);
+  
   // 初始化WeatherManager
-  weatherManager.begin();
+  weatherManager->begin();
 }
 
 /**
@@ -124,17 +143,32 @@ void initializeRTC() {
  */
 bool connectAndUpdateWiFi() {
   // 判断是否需要从网络更新天气
-  if (weatherManager.shouldUpdateFromNetwork()) {
+  if (weatherManager->shouldUpdateFromNetwork()) {
     LOG_INFO("Weather data is outdated, updating from network...");
     
-    // 初始化WiFi连接（使用默认配置）
-    wifiManager.begin();
+    // 从统一配置管理器获取WiFi配置
+    String ssid = unifiedConfigManager.getWiFiSSID();
+    String password = unifiedConfigManager.getWiFipassword();
+    String macAddress = unifiedConfigManager.getMacAddress();
+    
+    // 设置WiFi配置
+    WiFiConfig wifiConfig = {};
+    strncpy(wifiConfig.ssid, ssid.c_str(), sizeof(wifiConfig.ssid) - 1);
+    strncpy(wifiConfig.password, password.c_str(), sizeof(wifiConfig.password) - 1);
+    strncpy(wifiConfig.macAddress, macAddress.c_str(), sizeof(wifiConfig.macAddress) - 1);
+    wifiConfig.timeout = WIFI_CONNECT_TIMEOUT;
+    wifiConfig.autoReconnect = true;
+    wifiConfig.maxRetries = 3;
+    wifiConfig.useMacAddress = ENABLE_CUSTOM_MAC;
+    
+    // 初始化WiFi连接（使用统一配置管理器的配置）
+    wifiManager.begin(wifiConfig);
     
     // 如果WiFi连接成功，更新NTP时间和天气信息
     if (wifiManager.autoConnect()) {
       timeManager.setWiFiConnected(true);
       timeManager.updateNTPTime();
-      weatherManager.updateWeather(true);
+      weatherManager->updateWeather(true);
       return true;
     } else {
       LOG_WARN("WiFi connection failed, using cached data");
@@ -152,7 +186,7 @@ bool connectAndUpdateWiFi() {
  */
 void updateAndDisplay() {
   // 获取当前天气信息和时间
-  WeatherInfo currentWeather = weatherManager.getCurrentWeather();
+  WeatherInfo currentWeather = weatherManager->getCurrentWeather();
   DateTime currentTime = timeManager.getCurrentTime();
   
   // 读取温湿度数据（一次性读取，避免重复测量）
