@@ -3,7 +3,7 @@
 #include "../../config.h"
 
 WeatherManager::WeatherManager(const char* apiKey, const String& cityCode, BM8563* rtc, int eepromSize)
-  : _apiKey(apiKey), _cityCode(cityCode), _rtc(rtc), _updateIntervalSeconds(WEATHER_UPDATE_INTERVAL) {
+  : _apiKey(String(apiKey)), _cityCode(cityCode), _rtc(rtc), _updateIntervalSeconds(WEATHER_UPDATE_INTERVAL) {
   // 创建配置管理器实例，使用地址0与串口配置共享同一个EEPROM存储
   _configManager = new ConfigManager<ConfigData>(0, eepromSize);
   
