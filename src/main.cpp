@@ -407,32 +407,32 @@ void startSerialConfigService() {
 /**
  * @brief 处理串口命令
  * 读取串口输入并解析命令
- void processSerialCommand() {
-   // 等待完整的命令行输入
-   String command = "";
-   while (Serial.available() > 0) {
-     char c = Serial.read();
-     if (c == '\n' || c == '\r') {
-       break;
-     }
-     command += c;
-     delay(1); // 短暂延时，确保接收完整
-   }
-   
-   // 清除剩余的换行符
-   while (Serial.available() > 0 && (Serial.peek() == '\n' || Serial.peek() == '\r')) {
-     Serial.read();
-   }
-   
-   command.trim(); // 去除首尾空白字符
-   
-   // 调试输出
-   Serial.println("Received command: '" + command + "' (length: " + String(command.length()) + ")");
-   
-   if (command.length() == 0) {
-     Serial.print("> ");
-     return;
-   }
+ */
+void processSerialCommand() {
+  // 等待完整的命令行输入
+  String command = "";
+  while (Serial.available() > 0) {
+    char c = Serial.read();
+    if (c == '\n' || c == '\r') {
+      break;
+    }
+    command += c;
+    delay(1); // 短暂延时，确保接收完整
+  }
+  
+  // 清除剩余的换行符
+  while (Serial.available() > 0 && (Serial.peek() == '\n' || Serial.peek() == '\r')) {
+    Serial.read();
+  }
+  
+  command.trim(); // 去除首尾空白字符
+  
+  // 调试输出
+  Serial.println("Received command: '" + command + "' (length: " + String(command.length()) + ")");
+  
+  if (command.length() == 0) {
+    Serial.print("> ");
+    return;
   }
   
   // 解析命令和参数
