@@ -3,8 +3,8 @@
 #include "../../config.h"
 
 WeatherManager::WeatherManager(const char* apiKey, const String& cityCode, BM8563* rtc, int eepromSize)
-  : _apiKey(apiKey), _cityCode(cityCode), _rtc(rtc), _updateIntervalSeconds(WEATHER_UPDATE_INTERVAL) {
-  // 创建配置管理器实例
+  : _apiKey(String(apiKey)), _cityCode(cityCode), _rtc(rtc), _updateIntervalSeconds(WEATHER_UPDATE_INTERVAL) {
+  // 创建配置管理器实例，使用地址0与串口配置共享同一个EEPROM存储
   _configManager = new ConfigManager<ConfigData>(0, eepromSize);
   
   // 初始化默认天气信息
@@ -294,7 +294,34 @@ void WeatherManager::initializeDefaultWeather() {
 }
 
 void WeatherManager::convertToConfigData(const WeatherInfo& weatherInfo, ConfigData& configData) {
-  // 天气配置
+  // 先尝试读取现有配置，保持非天气字段不变
+  ConfigData existingConfig;
+  if (_configManager->read(existingConfig)) {
+    // 如果读取成功，复制现有的非天气配置
+    strncpy(configData.amapApiKey, existingConfig.amapApiKey, sizeof(configData.amapApiKey) - 1);
+    configData.amapApiKey[sizeof(configData.amapApiKey) - 1] = '\0';
+    
+    strncpy(configData.cityCode, existingConfig.cityCode, sizeof(configData.cityCode) - 1);
+    configData.cityCode[sizeof(configData.cityCode) - 1] = '\0';
+    
+    strncpy(configData.wifiSSID, existingConfig.wifiSSID, sizeof(configData.wifiSSID) - 1);
+    configData.wifiSSID[sizeof(configData.wifiSSID) - 1] = '\0';
+    
+    strncpy(configData.wifiPassword, existingConfig.wifiPassword, sizeof(configData.wifiPassword) - 1);
+    configData.wifiPassword[sizeof(configData.wifiPassword) - 1] = '\0';
+    
+    strncpy(configData.macAddress, existingConfig.macAddress, sizeof(configData.macAddress) - 1);
+    configData.macAddress[sizeof(configData.macAddress) - 1] = '\0';
+  } else {
+    // 如果读取失败，清空非天气字段
+    memset(configData.amapApiKey, 0, sizeof(configData.amapApiKey));
+    memset(configData.cityCode, 0, sizeof(configData.cityCode));
+    memset(configData.wifiSSID, 0, sizeof(configData.wifiSSID));
+    memset(configData.wifiPassword, 0, sizeof(configData.wifiPassword));
+    memset(configData.macAddress, 0, sizeof(configData.macAddress));
+  }
+  
+  // 只更新天气相关的数据
   configData.temperature = weatherInfo.Temperature;
   configData.humidity = weatherInfo.Humidity;
   configData.symbol = weatherInfo.Symbol;
@@ -308,24 +335,6 @@ void WeatherManager::convertToConfigData(const WeatherInfo& weatherInfo, ConfigD
   
   strncpy(configData.weather, weatherInfo.Weather.c_str(), sizeof(configData.weather) - 1);
   configData.weather[sizeof(configData.weather) - 1] = '\0';
-  
-  // API配置 - 从config.h获取默认值
-  strncpy(configData.amapApiKey, DEFAULT_AMAP_API_KEY, sizeof(configData.amapApiKey) - 1);
-  configData.amapApiKey[sizeof(configData.amapApiKey) - 1] = '\0';
-  
-  strncpy(configData.cityCode, DEFAULT_CITY_CODE, sizeof(configData.cityCode) - 1);
-  configData.cityCode[sizeof(configData.cityCode) - 1] = '\0';
-  
-  // WiFi配置 - 从config.h获取默认值
-  strncpy(configData.wifiSSID, DEFAULT_WIFI_SSID, sizeof(configData.wifiSSID) - 1);
-  configData.wifiSSID[sizeof(configData.wifiSSID) - 1] = '\0';
-  
-  strncpy(configData.wifiPassword, DEFAULT_WIFI_PASSWORD, sizeof(configData.wifiPassword) - 1);
-  configData.wifiPassword[sizeof(configData.wifiPassword) - 1] = '\0';
-  
-  // 硬件配置 - 从config.h获取默认值
-  strncpy(configData.macAddress, DEFAULT_MAC_ADDRESS, sizeof(configData.macAddress) - 1);
-  configData.macAddress[sizeof(configData.macAddress) - 1] = '\0';
 }
 
 void WeatherManager::convertFromConfigData(const ConfigData& configData, WeatherInfo& weatherInfo) {

@@ -83,7 +83,7 @@ public:
 
 private:
   // API配置
-  const char* _apiKey;
+  String _apiKey;
   String _cityCode;
   
   // 硬件引用

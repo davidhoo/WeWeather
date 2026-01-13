@@ -221,3 +221,51 @@ void GDEY029T94::drawBatteryIcon(int x, int y, float percentage) {
     }
   }
 }
+
+void GDEY029T94::showConfigDisplay(const char* apName, const char* apIP) {
+  LOG_INFO("Displaying configuration mode screen...");
+  
+  display.setFullWindow();
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    display.setTextColor(GxEPD_BLACK);
+    display.setFont(&FreeMonoBold9pt7b);
+    
+    int y = 20;
+    int lineHeight = 20;
+    
+    // 显示标题
+    display.setCursor(alignToPixel8(10), y);
+    display.print("Config Mode");
+    y += lineHeight;
+    
+    // 画分隔线
+    display.drawLine(alignToPixel8(10), y, display.width() - alignToPixel8(10), y, GxEPD_BLACK);
+    y += lineHeight;
+    
+    // 显示WiFi信息（WIFI: 和名称在同一行）
+    display.setCursor(alignToPixel8(10), y);
+    display.print("WIFI: ");
+    display.print(apName);
+    y += lineHeight;
+    
+    // 显示IP信息（IP: 和地址在同一行）
+    display.setCursor(alignToPixel8(10), y);
+    display.print("IP: ");
+    display.print(apIP);
+    y += lineHeight;
+    
+    // 画分隔线
+    display.drawLine(alignToPixel8(10), y, display.width() - alignToPixel8(10), y, GxEPD_BLACK);
+    y += lineHeight;
+    
+    // 显示连接提示（不换行）
+    display.setCursor(alignToPixel8(10), y);
+    display.print("Connect wifi and browse IP");
+    
+  } while (display.nextPage());
+  
+  display.hibernate();
+  LOG_INFO("Configuration mode screen displayed");
+}
