@@ -6,9 +6,9 @@
 #include <ESP8266HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
-#include <EEPROM.h>
 #include <time.h>
 #include "../BM8563/BM8563.h"
+#include "../ConfigManager/ConfigManager.h"
 
 // 天气信息结构体
 struct WeatherInfo {
@@ -25,21 +25,13 @@ struct WeatherInfo {
 // 前向声明 GDEY029T94 类
 class GDEY029T94;
 
-// 天气存储结构体（用于EEPROM存储）
-struct WeatherStorageData {
-  float temperature;
-  int humidity;
-  char symbol;
-  char windDirection[16];  // 限制字符串长度
-  char windSpeed[8];      // 限制字符串长度
-  char weather[16];       // 限制字符串长度
-  unsigned long lastUpdateTime;  // 上次更新时间戳
-};
-
 class WeatherManager {
 public:
   // 构造函数
   WeatherManager(const char* apiKey, const String& cityCode, BM8563* rtc, int eepromSize = 512);
+  
+  // 析构函数
+  ~WeatherManager();
   
   // 初始化
   void begin();
@@ -56,10 +48,10 @@ public:
   // 从网络获取天气数据
   bool fetchWeatherFromNetwork();
   
-  // 从EEPROM读取天气信息
+  // 从存储读取天气信息
   bool readWeatherFromStorage();
   
-  // 将天气信息写入EEPROM
+  // 将天气信息写入存储
   bool writeWeatherToStorage();
   
   // 设置更新间隔（秒）
@@ -71,7 +63,7 @@ public:
   // 设置上次更新时间戳
   bool setUpdateTime(unsigned long timestamp);
   
-  // 清除EEPROM中的天气数据
+  // 清除存储中的天气数据
   void clearWeatherData();
   
   // 将天气状况映射到符号
@@ -97,9 +89,8 @@ private:
   // 硬件引用
   BM8563* _rtc;
   
-  // EEPROM配置
-  int _eepromSize;
-  int _eepromAddress;
+  // 配置管理器
+  ConfigManager<ConfigData>* _configManager;
   
   // 更新间隔（默认30分钟）
   unsigned long _updateIntervalSeconds;
@@ -109,9 +100,8 @@ private:
   
   // 私有方法
   void initializeDefaultWeather();
-  void convertToStorageData(const WeatherInfo& weatherInfo, WeatherStorageData& storageData);
-  void convertFromStorageData(const WeatherStorageData& storageData, WeatherInfo& weatherInfo);
-  byte calculateChecksum(const WeatherStorageData& data);
+  void convertToConfigData(const WeatherInfo& weatherInfo, ConfigData& configData);
+  void convertFromConfigData(const ConfigData& configData, WeatherInfo& weatherInfo);
   unsigned long getCurrentUnixTimestamp();
 };
 
