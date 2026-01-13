@@ -299,17 +299,17 @@ void enterConfigMode() {
   int loopCount = 0;
   while (true) {
     // 处理串口命令
+    // 处理串口命令
     int available = Serial.available();
     if (available > 0) {
-      LOG_DEBUG_F("Serial data available: %d bytes, processing command...", available);
+      LOG_INFO_F("Serial data available: %d bytes, processing command...", available);
       processSerialCommand();
     }
     
     // 每10秒输出一次心跳信息
     if (loopCount % 100 == 0) {
-      LOG_DEBUG_F("Config mode running... (loop %d)", loopCount);
+      LOG_INFO_F("Config mode running... (loop %d)", loopCount);
     }
-    loopCount++;
     
     delay(100); // 减少延时，提高响应性
     // 这里可以添加其他配置模式的逻辑
