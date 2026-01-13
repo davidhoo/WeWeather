@@ -24,6 +24,9 @@ public:
   // 显示时间和天气信息
   void showTimeDisplay(const DateTime& currentTime, const WeatherInfo& currentWeather, float temperature = NAN, float humidity = NAN, float batteryPercentage = NAN);
   
+  // 显示配置模式信息
+  void showConfigDisplay(const char* apName, const char* apIP);
+  
   // 设置时间字体
   void setTimeFont(const GFXfont* font);
   

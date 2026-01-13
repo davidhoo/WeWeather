@@ -47,6 +47,14 @@ bool connectAndUpdateWiFi();
 void updateAndDisplay();
 void goToDeepSleep();
 
+// 配置模式相关函数声明
+bool checkConfigMode();
+void enterConfigMode();
+void clearRTCWakeupSettings();
+void showConfigDisplay();
+void startAPWebConfigService();
+void startSerialConfigService();
+
 /**
  * @brief 初始化串口通信
  * ESP8266 ROM bootloader 使用 74880 波特率，保持一致便于查看启动信息
@@ -181,6 +189,17 @@ void updateAndDisplay() {
 }
 void setup() {
   initializeSerial();
+  
+  // 检查是否需要进入配置模式
+  if (checkConfigMode()) {
+    // 进入配置模式
+    initializeDisplay();  // 配置模式需要显示屏
+    initializeRTC();      // 配置模式需要RTC来清除唤醒设置
+    enterConfigMode();    // 进入配置模式（不会返回）
+    return;
+  }
+  
+  // 正常运行模式
   initializeManagers();
   initializeSensors();
   initializeDisplay();
@@ -216,5 +235,136 @@ void goToDeepSleep() {
   // 进入深度睡眠，参数 0 表示无限期睡眠直到外部唤醒
   // 实际唤醒由 RTC 定时器触发硬件复位实现
   ESP.deepSleep(0);
+}
+
+/**
+ * @brief 检查是否需要进入配置模式
+ * 检测RXD引脚是否被拉低
+ * @return true 如果需要进入配置模式，false 否则
+ */
+bool checkConfigMode() {
+  // 设置RXD引脚为输入模式，启用内部上拉电阻
+  pinMode(RXD_PIN, INPUT_PULLUP);
+  delay(10); // 等待引脚状态稳定
+  
+  // 读取RXD引脚状态，如果被拉低则进入配置模式
+  bool isConfigMode = (digitalRead(RXD_PIN) == LOW);
+  
+  if (isConfigMode) {
+    LOG_INFO("RXD pin is LOW, entering configuration mode");
+  } else {
+    LOG_INFO("RXD pin is HIGH, normal operation mode");
+  }
+  
+  return isConfigMode;
+}
+
+/**
+ * @brief 进入配置模式
+ * 清除RTC唤醒设置，显示配置信息，启动配置服务
+ */
+void enterConfigMode() {
+  LOG_INFO("Entering configuration mode...");
+  
+  // 1. 清除RTC的定时唤醒设置
+  clearRTCWakeupSettings();
+  
+  // 2. 启动配置服务
+  startAPWebConfigService();
+  startSerialConfigService();
+  
+  // 3. 在屏幕显示配置信息提示（需要先启动服务获取IP）
+  showConfigDisplay();
+  
+  LOG_INFO("Configuration mode services started");
+  
+  // 配置模式下保持运行，不进入深度睡眠
+  // 实际的配置逻辑将在后续版本中实现
+  while (true) {
+    delay(1000);
+    // 这里可以添加配置模式的主循环逻辑
+    // 例如：处理Web请求、串口命令等
+  }
+}
+
+/**
+ * @brief 清除RTC的定时唤醒设置
+ * 防止在配置模式期间被RTC自动唤醒重启系统
+ */
+void clearRTCWakeupSettings() {
+  LOG_INFO("Clearing RTC wakeup settings...");
+  
+  // 清除定时器设置
+  rtc.clearTimer();
+  
+  // 禁用定时器中断
+  rtc.enableTimerInterrupt(false);
+  
+  // 清除所有中断标志
+  rtc.resetInterrupts();
+  
+  LOG_INFO("RTC wakeup settings cleared");
+}
+
+/**
+ * @brief 在屏幕显示配置信息提示
+ * 显示AP名称和IP地址
+ */
+void showConfigDisplay() {
+  LOG_INFO("Showing configuration display...");
+  
+  // 获取AP信息
+  const char* apName = "WeWeather";
+  IPAddress apIP = WiFi.softAPIP();
+  String apIPStr = apIP.toString();
+  
+  // 调用显示屏的配置显示方法
+  epd.showConfigDisplay(apName, apIPStr.c_str());
+  
+  LOG_INFO("Configuration display shown");
+}
+
+/**
+ * @brief 启动AP+WEB配置服务
+ * 启动名为"WeWeather"的AP热点
+ */
+void startAPWebConfigService() {
+  LOG_INFO("Starting AP+Web configuration service...");
+  
+  // 启动WiFi AP模式
+  const char* apName = "WeWeather";
+  const char* apPassword = ""; // 无密码的开放热点
+  
+  WiFi.mode(WIFI_AP);
+  bool apStarted = WiFi.softAP(apName, apPassword);
+  
+  if (apStarted) {
+    IPAddress apIP = WiFi.softAPIP();
+    LOG_INFO("AP started successfully");
+    LOG_INFO_F("AP Name: %s", apName);
+    LOG_INFO_F("AP IP: %s", apIP.toString().c_str());
+  } else {
+    LOG_ERROR("Failed to start AP");
+  }
+  
+  // TODO: 启动Web服务器和配置界面（后续实现）
+  
+  LOG_INFO("AP+Web configuration service started");
+}
+
+/**
+ * @brief 启动串口配置服务
+ * 空实现，后续完善
+ */
+void startSerialConfigService() {
+  LOG_INFO("Starting serial configuration service...");
+  
+  // TODO: 实现串口配置功能
+  // 例如：
+  // - 监听串口命令
+  // - 解析配置参数
+  // - 保存配置到存储
+  
+  LOG_INFO("Serial configuration service started (placeholder implementation)");
 }
 
