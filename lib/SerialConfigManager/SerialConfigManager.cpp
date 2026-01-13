@@ -65,8 +65,8 @@ void SerialConfigManager::startConfigService() {
  */
 void SerialConfigManager::showWelcomeMessage() {
     Serial.println();
-    Serial.println("=== WeWeather Serial Configuration ===");
-    Serial.println("Type 'help' for available commands");
+    Serial.println(F("=== WeWeather Serial Configuration ==="));
+    Serial.println(F("Type 'help' for available commands"));
     printPrompt();
 }
 
@@ -74,7 +74,7 @@ void SerialConfigManager::showWelcomeMessage() {
  * @brief 打印命令提示符
  */
 void SerialConfigManager::printPrompt() {
-    Serial.print("> ");
+    Serial.print(F("> "));
 }
 
 /**
@@ -110,8 +110,7 @@ bool SerialConfigManager::processInput() {
         command.trim(); // 去除首尾空白字符
         
         // 调试输出
-        Serial.println("Received command: '" + command + "' (length: " + String(command.length()) + ")");
-        
+        Serial.println(F("Received command: '") + command + F("' (length: ") + String(command.length()) + F(")"));
         if (command.length() > 0) {
             parseAndExecuteCommand(command);
         }
@@ -136,7 +135,7 @@ void SerialConfigManager::parseAndExecuteCommand(const String& command) {
     cmd.toLowerCase();
     
     // 调试输出
-    Serial.println("Parsed command: '" + cmd + "', args: '" + args + "'");
+    Serial.println(F("Parsed command: '") + cmd + F("', args: '") + args + F("'"));
     
     // 执行命令
     if (cmd == "show") {
@@ -149,8 +148,8 @@ void SerialConfigManager::parseAndExecuteCommand(const String& command) {
             String value = args.substring(argSpaceIndex + 1);
             setConfig(key, value);
         } else {
-            Serial.println("Usage: set <key> <value>");
-            Serial.println("Keys: ssid, password, apikey, citycode, mac");
+            Serial.println(F("Usage: set <key> <value>"));
+            Serial.println(F("Keys: ssid, password, apikey, citycode, mac"));
         }
     } else if (cmd == "clear") {
         clearConfig();
@@ -159,8 +158,8 @@ void SerialConfigManager::parseAndExecuteCommand(const String& command) {
     } else if (cmd == "exit") {
         exitConfigMode();
     } else {
-        Serial.println("Unknown command: '" + cmd + "'");
-        Serial.println("Type 'help' for available commands");
+        Serial.println(F("Unknown command: '") + cmd + F("'"));
+        Serial.println(F("Type 'help' for available commands"));
     }
 }
 
@@ -184,22 +183,21 @@ bool SerialConfigManager::isValidConfigKey(const String& key) {
  * @brief 显示当前配置
  */
 void SerialConfigManager::showConfig() {
-    Serial.println("=== Current Configuration ===");
+    Serial.println(F("=== Current Configuration ==="));
     
     ConfigData config;
     if (configManager->read(config)) {
-        Serial.println("SSID: " + String(config.wifiSSID));
-        Serial.println("Password: " + String(config.wifiPassword));
-        Serial.println("API Key: " + String(config.amapApiKey));
-        Serial.println("City Code: " + String(config.cityCode));
-        Serial.println("MAC Address: " + String(config.macAddress));
+        Serial.println(F("SSID: ") + String(config.wifiSSID));
+        Serial.println(F("Password: ") + String(config.wifiPassword));
+        Serial.println(F("API Key: ") + String(config.amapApiKey));
+        Serial.println(F("City Code: ") + String(config.cityCode));
+        Serial.println(F("MAC Address: ") + String(config.macAddress));
     } else {
-        Serial.println("No valid configuration found or failed to read");
+        Serial.println(F("No valid configuration found or failed to read"));
     }
     
-    Serial.println("=============================");
+    Serial.println(F("============================="));
 }
-
 /**
  * @brief 设置配置项
  * @param key 配置键名
@@ -211,8 +209,8 @@ bool SerialConfigManager::setConfig(const String& key, const String& value) {
     lowerKey.toLowerCase();
     
     if (!isValidConfigKey(lowerKey)) {
-        Serial.println("Invalid key: " + key);
-        Serial.println("Valid keys: ssid, password, apikey, citycode, mac");
+        Serial.println(F("Invalid key: ") + key);
+        Serial.println(F("Valid keys: ssid, password, apikey, citycode, mac"));
         return false;
     }
     
@@ -241,14 +239,14 @@ bool SerialConfigManager::setConfig(const String& key, const String& value) {
         config.macAddress[sizeof(config.macAddress) - 1] = '\0';
     }
     
-    Serial.println("Set " + key + " = " + value);
+    Serial.println(F("Set ") + key + F(" = ") + value);
     
     // 直接写入EEPROM
     if (configManager->write(config)) {
-        Serial.println("Configuration saved successfully");
+        Serial.println(F("Configuration saved successfully"));
         return true;
     } else {
-        Serial.println("Failed to save configuration");
+        Serial.println(F("Failed to save configuration"));
         return false;
     }
 }
@@ -272,14 +270,14 @@ bool SerialConfigManager::clearConfig() {
         
         // 写回配置，天气数据保持不变
         if (configManager->write(config)) {
-            Serial.println("System configuration cleared (weather data preserved)");
+            Serial.println(F("System configuration cleared (weather data preserved)"));
             return true;
         } else {
-            Serial.println("Failed to clear configuration");
+            Serial.println(F("Failed to clear configuration"));
             return false;
         }
     } else {
-        Serial.println("No configuration found to clear");
+        Serial.println(F("No configuration found to clear"));
         return false;
     }
 }
@@ -288,21 +286,21 @@ bool SerialConfigManager::clearConfig() {
  * @brief 显示帮助信息
  */
 void SerialConfigManager::showHelp() {
-    Serial.println("=== Available Commands ===");
-    Serial.println("show                    - Display current configuration");
-    Serial.println("set <key> <value>       - Set and save configuration value");
-    Serial.println("  Keys: ssid, password, apikey, citycode, mac");
-    Serial.println("clear                   - Clear all configuration");
-    Serial.println("help                    - Show this help message");
-    Serial.println("exit                    - Exit configuration mode (restart system)");
-    Serial.println("==========================");
+    Serial.println(F("=== Available Commands ==="));
+    Serial.println(F("show                    - Display current configuration"));
+    Serial.println(F("set <key> <value>       - Set and save configuration value"));
+    Serial.println(F("  Keys: ssid, password, apikey, citycode, mac"));
+    Serial.println(F("clear                   - Clear all configuration"));
+    Serial.println(F("help                    - Show this help message"));
+    Serial.println(F("exit                    - Exit configuration mode (restart system)"));
+    Serial.println(F("=========================="));
     Serial.println();
-    Serial.println("Examples:");
-    Serial.println("  set ssid MyWiFi");
-    Serial.println("  set password myPassword");
-    Serial.println("  set apikey your_amap_api_key");
-    Serial.println("  set citycode 110108");
-    Serial.println("  set mac AA:BB:CC:DD:EE:FF");
+    Serial.println(F("Examples:"));
+    Serial.println(F("  set ssid MyWiFi"));
+    Serial.println(F("  set password myPassword"));
+    Serial.println(F("  set apikey your_amap_api_key"));
+    Serial.println(F("  set citycode 110108"));
+    Serial.println(F("  set mac AA:BB:CC:DD:EE:FF"));
 }
 
 /**
@@ -310,15 +308,15 @@ void SerialConfigManager::showHelp() {
  * 重启系统以应用新配置
  */
 void SerialConfigManager::exitConfigMode() {
-    Serial.println("Exiting configuration mode...");
-    Serial.println("System will restart in 3 seconds...");
+    Serial.println(F("Exiting configuration mode..."));
+    Serial.println(F("System will restart in 3 seconds..."));
     
     for (int i = 3; i > 0; i--) {
-        Serial.println(String(i) + "...");
+        Serial.println(String(i) + F("..."));
         delay(1000);
     }
     
-    Serial.println("Restarting...");
+    Serial.println(F("Restarting..."));
     Serial.flush();
     
     isConfigMode = false;
