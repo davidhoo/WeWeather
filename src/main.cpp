@@ -279,9 +279,16 @@ bool checkConfigMode() {
 void enterConfigMode() {
   LOG_INFO("Entering configuration mode...");
   
-  // 1. 重新配置RXD引脚为串口功能
+  // 1. 重新配置RXD引脚为串口功能并重新初始化串口
   pinMode(RXD_PIN, INPUT);  // 移除上拉电阻，恢复串口功能
-  LOG_INFO("RXD pin reconfigured for serial communication");
+  
+  // 重新初始化串口以确保RXD引脚正常工作
+  Serial.end();
+  delay(100);
+  Serial.begin(SERIAL_BAUD_RATE);
+  delay(100);
+  
+  LOG_INFO("RXD pin reconfigured and serial reinitialized");
   
   // 2. 清除RTC的定时唤醒设置
   clearRTCWakeupSettings();
