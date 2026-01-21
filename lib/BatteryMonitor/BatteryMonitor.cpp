@@ -3,10 +3,13 @@
 
 BatteryMonitor::BatteryMonitor(uint8_t pin) {
     adcPin = pin;
-    // ESP8266 ADC 参考电压为 3.3V，ADC 分辨率为 10 位 (0-1023)
-    // 基础电压计算：ADC值 * (3.3V / 1023)
-    // 分压校正：根据实际测量 4.2V -> 2.351V，校正系数为 4.2/2.351 ≈ 1.787
-    voltageMultiplier = (3.3 / 1023.0) * 1.787;
+    // ESP8266 ADC 参考电压为 1.0V，ADC 分辨率为 10 位 (0-1023)
+    // 根据实际测量校准：
+    //   - 电池 3.1V 时，ADC 原始值 744，实测分压 0.701V
+    //   - 电池 4.2V 时，ADC 分压 0.949V，推算 ADC 原始值约 1008
+    //   电压倍率 = 实际电池电压 / ADC原始值
+    //   3.1V / 744 ≈ 0.004167
+    voltageMultiplier = 0.004167;
     // 使用config.h中的电池电压范围配置
     minVoltage = BATTERY_MIN_VOLTAGE;
     maxVoltage = BATTERY_MAX_VOLTAGE;
