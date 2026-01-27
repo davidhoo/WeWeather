@@ -1,18 +1,43 @@
 #include "WebConfigManager.h"
 #include "../LogManager/LogManager.h"
 
-// 将HTML模板存储在PROGMEM中以节省RAM
+// 将HTML模板存储在PROGMEM中以节省RAM（仅包含英文部分）
 const char HTML_HEAD[] PROGMEM = "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\"><title>WeWeather</title><style>body{font-family:Arial;margin:20px;background:#f5f5f5}.container{max-width:400px;margin:0 auto;background:white;padding:20px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1)}h1{text-align:center;color:#333;margin-bottom:20px}.form-group{margin-bottom:15px}label{display:block;margin-bottom:5px;font-weight:bold;color:#555}input{width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;font-size:14px;box-sizing:border-box}input:focus{border-color:#4CAF50;outline:none}.btn-group{text-align:center;margin-top:20px}button{background:#4CAF50;color:white;padding:10px 20px;border:none;border-radius:4px;cursor:pointer;font-size:14px;margin:0 5px}button:hover{background:#45a049}.exit-btn{background:#f44336}.exit-btn:hover{background:#da190b}.info{background:#e7f3ff;border:1px solid #b3d9ff;padding:10px;border-radius:4px;margin-bottom:15px;font-size:13px}</style></head><body><div class=\"container\">";
 
 const char HTML_FOOT[] PROGMEM = "</div></body></html>";
 
-const char CONFIG_FORM[] PROGMEM = "<h1>WeWeather 配置</h1><div class=\"info\"><strong>说明：</strong>配置完成后点击保存，设备将重启并应用新配置。</div><form method=\"POST\" action=\"/save\"><div class=\"form-group\"><label>WiFi名称:</label><input type=\"text\" name=\"ssid\" value=\"%s\" placeholder=\"请输入WiFi名称\"></div><div class=\"form-group\"><label>WiFi密码:</label><input type=\"text\" name=\"password\" value=\"%s\" placeholder=\"请输入WiFi密码\"></div><div class=\"form-group\"><label>城市代码:</label><input type=\"text\" name=\"citycode\" value=\"%s\" placeholder=\"例如：110108\"></div><div class=\"form-group\"><label>API Key:</label><input type=\"text\" name=\"apikey\" value=\"%s\" placeholder=\"请输入高德地图API密钥\"></div><div class=\"form-group\"><label>MAC地址:</label><input type=\"text\" name=\"mac\" value=\"%s\" placeholder=\"例如：AA:BB:CC:DD:EE:FF\"></div><div class=\"btn-group\"><button type=\"submit\">保存配置</button><button type=\"button\" class=\"exit-btn\" onclick=\"location.href='/exit'\">退出配置</button></div></form>";
+// 包含中文的模板使用String对象动态构建
+String getConfigForm() {
+    return String("<h1>WeWeather 配置</h1>") +
+           "<div class=\"info\"><strong>说明：</strong>配置完成后点击保存，设备将重启并应用新配置。</div>" +
+           "<form method=\"POST\" action=\"/save\">" +
+           "<div class=\"form-group\"><label>WiFi名称:</label><input type=\"text\" name=\"ssid\" value=\"%s\" placeholder=\"请输入WiFi名称\"></div>" +
+           "<div class=\"form-group\"><label>WiFi密码:</label><input type=\"text\" name=\"password\" value=\"%s\" placeholder=\"请输入WiFi密码\"></div>" +
+           "<div class=\"form-group\"><label>城市代码:</label><input type=\"text\" name=\"citycode\" value=\"%s\" placeholder=\"例如：110108\"></div>" +
+           "<div class=\"form-group\"><label>API Key:</label><input type=\"text\" name=\"apikey\" value=\"%s\" placeholder=\"请输入高德地图API密钥\"></div>" +
+           "<div class=\"form-group\"><label>MAC地址:</label><input type=\"text\" name=\"mac\" value=\"%s\" placeholder=\"例如：AA:BB:CC:DD:EE:FF\"></div>" +
+           "<div class=\"btn-group\"><button type=\"submit\">保存配置</button><button type=\"button\" class=\"exit-btn\" onclick=\"location.href='/exit'\">退出配置</button></div>" +
+           "</form>";
+}
 
-const char SUCCESS_PAGE[] PROGMEM = "<h1 style=\"color:#4CAF50\">✓ 配置保存成功</h1><p>配置已保存，设备将在 <span id=\"countdown\" style=\"color:#f44336;font-weight:bold\">3</span> 秒后重启。</p><script>let c=3;setInterval(()=>{document.getElementById('countdown').textContent=--c;if(c<=0)document.body.innerHTML='<div class=\"container\"><h1>设备重启中...</h1></div>';},1000);</script>";
+String getSuccessPage() {
+    return String("<h1 style=\"color:#4CAF50\">✓ 配置保存成功</h1>") +
+           "<p>配置已保存，设备将在 <span id=\"countdown\" style=\"color:#f44336;font-weight:bold\">3</span> 秒后重启。</p>" +
+           "<script>let c=3;setInterval(()=>{document.getElementById('countdown').textContent=--c;if(c<=0)document.body.innerHTML='<div class=\"container\"><h1>设备重启中...</h1></div>';},1000);</script>";
+}
 
-const char ERROR_PAGE[] PROGMEM = "<h1 style=\"color:#f44336\">✗ 配置保存失败</h1><p>配置保存过程中出现错误，请重试。</p><div class=\"btn-group\"><button onclick=\"location.href='/config'\">重新配置</button><button class=\"exit-btn\" onclick=\"location.href='/exit'\">退出配置</button></div>";
+String getErrorPage() {
+    return String("<h1 style=\"color:#f44336\">✗ 配置保存失败</h1>") +
+           "<p>配置保存过程中出现错误，请重试。</p>" +
+           "<div class=\"btn-group\"><button onclick=\"location.href='/config'\">重新配置</button><button class=\"exit-btn\" onclick=\"location.href='/exit'\">退出配置</button></div>";
+}
 
-const char EXIT_PAGE[] PROGMEM = "<h1 style=\"color:#f44336\">正在退出配置模式</h1><p>设备将在 <span id=\"countdown\" style=\"color:#f44336;font-weight:bold\">3</span> 秒后重启</p><p>感谢使用 WeWeather！</p><script>let c=3;setInterval(()=>{document.getElementById('countdown').textContent=--c;if(c<=0)document.body.innerHTML='<div class=\"container\"><h1>设备重启中...</h1></div>';},1000);</script>";
+String getExitPage() {
+    return String("<h1 style=\"color:#f44336\">正在退出配置模式</h1>") +
+           "<p>设备将在 <span id=\"countdown\" style=\"color:#f44336;font-weight:bold\">3</span> 秒后重启</p>" +
+           "<p>感谢使用 WeWeather！</p>" +
+           "<script>let c=3;setInterval(()=>{document.getElementById('countdown').textContent=--c;if(c<=0)document.body.innerHTML='<div class=\"container\"><h1>设备重启中...</h1></div>';},1000);</script>";
+}
 
 /**
  * @brief 构造函数
@@ -138,6 +163,7 @@ void WebConfigManager::handleRoot() {
 void WebConfigManager::handleConfig() {
     LOG_INFO("Handling config page request");
     String html = generateConfigPage();
+    webServer->sendHeader("Content-Type", "text/html; charset=UTF-8");
     webServer->send(200, "text/html", html);
 }
 
@@ -192,6 +218,7 @@ void WebConfigManager::handleSave() {
         LOG_INFO("Configuration saved successfully");
         // 发送成功页面，然后自动退出配置模式
         String html = generateSuccessPage();
+        webServer->sendHeader("Content-Type", "text/html; charset=UTF-8");
         webServer->send(200, "text/html", html);
         
         // 延迟3秒后自动退出配置模式，与串口模式保持一致
@@ -201,6 +228,7 @@ void WebConfigManager::handleSave() {
         LOG_ERROR("Failed to save configuration");
         // 发送错误页面
         String html = generateErrorPage();
+        webServer->sendHeader("Content-Type", "text/html; charset=UTF-8");
         webServer->send(500, "text/html", html);
     }
 }
@@ -211,6 +239,7 @@ void WebConfigManager::handleSave() {
 void WebConfigManager::handleExit() {
     LOG_INFO("Handling exit request");
     String html = generateExitPage();
+    webServer->sendHeader("Content-Type", "text/html; charset=UTF-8");
     webServer->send(200, "text/html", html);
     
     // 延迟退出配置模式
@@ -258,7 +287,8 @@ String WebConfigManager::generateConfigPage() {
     const char* mac = configValid ? config.macAddress : "";
     
     // 使用sprintf格式化页面内容
-    snprintf_P(buffer, sizeof(buffer), CONFIG_FORM, ssid, password, citycode, apikey, mac);
+    String formTemplate = getConfigForm();
+    snprintf(buffer, sizeof(buffer), formTemplate.c_str(), ssid, password, citycode, apikey, mac);
     
     String html;
     html.reserve(1400);  // 预分配内存
@@ -276,7 +306,7 @@ String WebConfigManager::generateSuccessPage() {
     String html;
     html.reserve(800);
     html += FPSTR(HTML_HEAD);
-    html += FPSTR(SUCCESS_PAGE);
+    html += getSuccessPage();
     html += FPSTR(HTML_FOOT);
     return html;
 }
@@ -288,7 +318,7 @@ String WebConfigManager::generateErrorPage() {
     String html;
     html.reserve(600);
     html += FPSTR(HTML_HEAD);
-    html += FPSTR(ERROR_PAGE);
+    html += getErrorPage();
     html += FPSTR(HTML_FOOT);
     return html;
 }
@@ -300,7 +330,7 @@ String WebConfigManager::generateExitPage() {
     String html;
     html.reserve(700);
     html += FPSTR(HTML_HEAD);
-    html += FPSTR(EXIT_PAGE);
+    html += getExitPage();
     html += FPSTR(HTML_FOOT);
     return html;
 }

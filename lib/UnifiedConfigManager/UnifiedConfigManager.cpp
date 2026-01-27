@@ -133,8 +133,23 @@ String UnifiedConfigManager::_getConfigValue(const char* eepromField, const char
     ConfigData configData;
     if (_readFromEEPROM(configData)) {
         char* field = (char*)&configData + fieldOffset;
+        
+        // 调试：输出原始字段的十六进制数据
+        Serial.print("DEBUG: Raw EEPROM field at offset ");
+        Serial.print(fieldOffset);
+        Serial.print(": ");
+        for (int i = 0; i < 32 && field[i] != '\0'; i++) {
+            Serial.print((uint8_t)field[i], HEX);
+            Serial.print(" ");
+        }
+        Serial.println();
+        
         if (!_isStringEmpty(field)) {
-            return String(field);
+            String result = String(field);
+            Serial.print("DEBUG: String result: '");
+            Serial.print(result);
+            Serial.println("'");
+            return result;
         }
     }
     return String(defaultValue);
@@ -178,18 +193,37 @@ void UnifiedConfigManager::_getDefaultConfig(ConfigData& configData) {
 bool UnifiedConfigManager::_isStringEmpty(const char* str) {
     if (str == nullptr) return true;
     
-    while (*str) {
-        if (*str != ' ' && *str != '\t' && *str != '\n' && *str != '\r') {
-            return false;
+    for (size_t i = 0; i < 64; i++) {  // 限制检查长度，避免无限循环
+        uint8_t c = (uint8_t)str[i];
+        // 检查是否遇到字符串结束符
+        if (c == 0) {
+            return true;  // 空字符串
         }
-        str++;
+        // 检查是否为EEPROM默认值（0xFF）
+        if (c == 0xFF) {
+            return true;  // EEPROM未初始化，视为空
+        }
+        // 检查是否为非空白字符
+        if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
+            return false;  // 找到有效字符
+        }
     }
-    return true;
+    return true;  // 全是空白或超长
 }
 
 void UnifiedConfigManager::_safeStringCopy(char* dest, const char* src, size_t maxLen) {
     if (dest == nullptr || src == nullptr || maxLen == 0) return;
     
-    strncpy(dest, src, maxLen - 1);
-    dest[maxLen - 1] = '\0';
+    // 清空目标缓冲区
+    memset(dest, 0, maxLen);
+    
+    // 复制字符串，遇到0xFF或0时停止
+    for (size_t i = 0; i < maxLen - 1; i++) {
+        uint8_t c = (uint8_t)src[i];
+        if (c == 0 || c == 0xFF) {
+            break;  // 遇到结束符或EEPROM默认值
+        }
+        dest[i] = (char)c;
+    }
+    dest[maxLen - 1] = '\0';  // 确保字符串结束
 }

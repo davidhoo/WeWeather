@@ -50,6 +50,12 @@ public:
     static void infof(const __FlashStringHelper* format, ...);
     static void debugf(const __FlashStringHelper* format, ...);
     
+    // UTF-8安全的格式化日志方法（用于处理可能包含中文的字符串）
+    static void errorUTF8(const char* format, ...);
+    static void warnUTF8(const char* format, ...);
+    static void infoUTF8(const char* format, ...);
+    static void debugUTF8(const char* format, ...);
+    
     // 打印分隔线
     static void printSeparator(char character = '=', int length = 30);
     
@@ -72,6 +78,7 @@ private:
     static void _print(LogLevel level, const String& message);
     static void _print(LogLevel level, const char* message);
     static void _printf(LogLevel level, const __FlashStringHelper* format, va_list args);
+    static void _printfUTF8(LogLevel level, const char* format, va_list args);
 };
 
 // 便捷宏定义
@@ -84,6 +91,12 @@ private:
 #define LOG_WARN_F(format, ...) LogManager::warnf(F(format), ##__VA_ARGS__)
 #define LOG_INFO_F(format, ...) LogManager::infof(F(format), ##__VA_ARGS__)
 #define LOG_DEBUG_F(format, ...) LogManager::debugf(F(format), ##__VA_ARGS__)
+
+// UTF-8安全的日志宏定义（用于处理可能包含中文的字符串）
+#define LOG_ERROR_UTF8(format, ...) LogManager::errorUTF8(format, ##__VA_ARGS__)
+#define LOG_WARN_UTF8(format, ...) LogManager::warnUTF8(format, ##__VA_ARGS__)
+#define LOG_INFO_UTF8(format, ...) LogManager::infoUTF8(format, ##__VA_ARGS__)
+#define LOG_DEBUG_UTF8(format, ...) LogManager::debugUTF8(format, ##__VA_ARGS__)
 
 // 全局日志管理器实例
 extern LogManager Logger;

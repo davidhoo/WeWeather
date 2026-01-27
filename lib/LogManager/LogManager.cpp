@@ -112,6 +112,35 @@ void LogManager::debugf(const __FlashStringHelper* format, ...) {
     va_end(args);
 }
 
+// UTF-8安全的格式化日志方法实现
+void LogManager::errorUTF8(const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    _printfUTF8(LOG_ERROR, format, args);
+    va_end(args);
+}
+
+void LogManager::warnUTF8(const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    _printfUTF8(LOG_WARN, format, args);
+    va_end(args);
+}
+
+void LogManager::infoUTF8(const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    _printfUTF8(LOG_INFO, format, args);
+    va_end(args);
+}
+
+void LogManager::debugUTF8(const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    _printfUTF8(LOG_DEBUG, format, args);
+    va_end(args);
+}
+
 void LogManager::printSeparator(char character, int length) {
     if (_currentLevel >= LOG_INFO) {
         for (int i = 0; i < length; i++) {
@@ -232,5 +261,16 @@ void LogManager::_printf(LogLevel level, const __FlashStringHelper* format, va_l
     // 创建缓冲区用于格式化字符串
     char buffer[256];
     vsnprintf_P(buffer, sizeof(buffer), (const char*)format, args);
+    Serial.println(buffer);
+}
+
+void LogManager::_printfUTF8(LogLevel level, const char* format, va_list args) {
+    if (!_initialized || level > _currentLevel) return;
+    
+    _printPrefix(level);
+    
+    // 创建缓冲区用于格式化字符串
+    char buffer[256];
+    vsnprintf(buffer, sizeof(buffer), format, args);
     Serial.println(buffer);
 }
